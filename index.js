@@ -39,39 +39,51 @@ app.post("/webhook", line.middleware(config), (req, res) => {
         console.error("❌ handleEvent error:", err?.originalError || err);
         return null;
       }
-    })
+    }),
   );
 });
 
 // 5) 確保 handleEvent 一定 return Promise（replyMessage 本身就是 Promise）
 function handleEvent(event) {
   if (event.type === "message" && event.message?.type === "text") {
+    const text = event.message.text;
+
+    // 例：只在群組中、且訊息包含「@」才監控/儲存
+    if (event.source.type === "group" && !text.includes("@")) {
+      return Promise.resolve(null);
+    }
+
     const data = {
+      sourceType: event.source.type, // user / group / room
       userId: event.source.userId,
-      text: event.message.text,
+      groupId: event.source.groupId,
+      roomId: event.source.roomId,
+      text,
       timestamp: event.timestamp,
     };
 
-    const filePath = path.join(__dirname, "messages.jsonl");
-
-    fs.appendFileSync(filePath, JSON.stringify(data) + "\n", "utf-8");
+    fs.appendFileSync(
+      path.join(__dirname, "messages.jsonl"),
+      JSON.stringify(data) + "\n",
+      "utf-8",
+    );
 
     return client.replyMessage(event.replyToken, {
       type: "text",
-      text: `已儲存：${event.message.text}`,
+      text: `已監控並儲存：${text}`,
     });
   }
 
   return Promise.resolve(null);
 }
 
-// ✅ 6) 加上錯誤處理（可以抓到 middleware 擋下來的錯）
+// 6) 加上錯誤處理（可以抓到 middleware 擋下來的錯）
 app.use((err, req, res, next) => {
   console.error("❌ middleware error:", err);
   res.status(500).send(err.message);
 });
 
-// ✅ 7) 啟動伺服器
+// 7) 啟動伺服器
 app.listen(port, () => {
   console.log(`伺服器已啟動，監聽 Port: ${port}`);
 });
