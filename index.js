@@ -16,6 +16,27 @@ const config = {
 
 // 2) 先初始化 client（避免 handleEvent 用到時還沒建立）
 const client = new line.Client(config);
+const STATE_FILE = path.join(__dirname, "monitor_state.json");
+
+function loadState() {
+  try {
+    return JSON.parse(fs.readFileSync(STATE_FILE, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveState(state) {
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
+}
+
+function isCommandToStart(text) {
+  return /幫我抓取訊息|開始監控|開始讀取/.test(text);
+}
+
+function isCommandToStop(text) {
+  return /取消讀取|停止監控|停止讀取/.test(text);
+}
 
 // 3) 測試路由：確認伺服器有活著
 app.get("/", (req, res) => {
@@ -45,19 +66,47 @@ app.post("/webhook", line.middleware(config), (req, res) => {
 
 // 5) 確保 handleEvent 一定 return Promise（replyMessage 本身就是 Promise）
 function handleEvent(event) {
-  if (event.type === "message" && event.message?.type === "text") {
-    const text = event.message.text;
+  if (!(event.type === "message" && event.message?.type === "text")) {
+    return Promise.resolve(null);
+  }
 
-    // 例：只在群組中、且訊息包含「@」才監控/儲存
-    if (event.source.type === "group" && !text.includes("@")) {
-      return Promise.resolve(null);
+  const text = event.message.text.trim();
+  const sourceType = event.source.type;
+
+  // ===== 群組邏輯 =====
+  if (sourceType === "group") {
+    const groupId = event.source.groupId;
+    const state = loadState();
+    const isOn = !!state[groupId];
+
+    // 開始監控
+    if (isCommandToStart(text)) {
+      state[groupId] = true;
+      saveState(state);
+      return client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "✅ 已開始監控本群組訊息（只記錄之後的新訊息）。",
+      });
     }
 
+    // 停止監控
+    if (isCommandToStop(text)) {
+      state[groupId] = false;
+      saveState(state);
+      return client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "⛔ 已停止監控本群組訊息。",
+      });
+    }
+
+    // 沒開監控就不做事
+    if (!isOn) return Promise.resolve(null);
+
+    // 寫入訊息
     const data = {
-      sourceType: event.source.type, // user / group / room
+      sourceType,
+      groupId,
       userId: event.source.userId,
-      groupId: event.source.groupId,
-      roomId: event.source.roomId,
       text,
       timestamp: event.timestamp,
     };
@@ -68,13 +117,27 @@ function handleEvent(event) {
       "utf-8",
     );
 
-    return client.replyMessage(event.replyToken, {
-      type: "text",
-      text: `已監控並儲存：${text}`,
-    });
+    return Promise.resolve(null); // 不吵群
   }
 
-  return Promise.resolve(null);
+  // ===== 一對一聊天（維持你原本邏輯）=====
+  const data = {
+    sourceType,
+    userId: event.source.userId,
+    text,
+    timestamp: event.timestamp,
+  };
+
+  fs.appendFileSync(
+    path.join(__dirname, "messages.jsonl"),
+    JSON.stringify(data) + "\n",
+    "utf-8",
+  );
+
+  return client.replyMessage(event.replyToken, {
+    type: "text",
+    text: `已儲存：${text}`,
+  });
 }
 
 // 6) 加上錯誤處理（可以抓到 middleware 擋下來的錯）
