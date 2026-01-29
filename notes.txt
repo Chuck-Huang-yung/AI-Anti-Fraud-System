@@ -1,0 +1,6 @@
+{
+  "user_id": "TestUser_001",
+  "content": "親愛的顧客，因系統誤刷，請操作ATM解除分期設定，以免重複扣款。"
+}
+
+SELECT * FROM message_logs ORDER BY id DESC;
