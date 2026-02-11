@@ -1,6 +1,6 @@
 import React from "react";
-import Screen5 from "./screens/Screen5";
+import ScreenGroupList from "./screens/ScreenGroupList";
 
 export default function App() {
-  return <Screen5 />;
+  return <ScreenGroupList />;
 }
