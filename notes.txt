@@ -4,3 +4,5 @@
 }
 
 SELECT * FROM message_logs ORDER BY id DESC;
+
+{ "user_id": "User_Son", "content": "您的帳戶涉及洗錢，將被監管帳戶，請匯款至..." }
