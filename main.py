@@ -1,7 +1,9 @@
 # main.py (包含家庭協防邏輯的完整修正版)
 import os
+import re
 from fastapi import FastAPI, File, UploadFile, Form
 from pydantic import BaseModel
+from typing import Optional
 from google.cloud import vision
 from google.oauth2 import service_account
 
@@ -45,6 +47,14 @@ class UserRelation(Base):
     user_id = Column(String, index=True)      # Line User ID
     group_id = Column(String, index=True)     # Family Group ID
     role = Column(String)                     # Role (e.g., Mom, Son)
+
+class FraudLink(Base):
+    __tablename__ = "fraud_links"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(String, unique=True, index=True) # 網址 (設為唯一，避免重複)
+    source = Column(String)                       # 資料來源 (例如: 政府OpenData)
+    created_at = Column(DateTime, default=datetime.now)
 
 # 初始化資料庫
 Base.metadata.create_all(bind=engine)
@@ -148,6 +158,42 @@ def find_family_members(user_id):
         db.close()
     return family_list
 
+# --- 新增一個檢查資料庫網址的函式 ---
+def check_url_in_blacklist(text):
+    """
+    輸入一段文字，自動抓出裡面的網址，並去資料庫查是不是黑名單
+    """
+    # 1. 用正規表達式抓出所有網址 (http/https/www 開頭)
+    url_pattern = re.compile(r'https?://[^\s]+|www\.[^\s]+')
+    found_urls = url_pattern.findall(text)
+    
+    if not found_urls:
+        return None # 沒網址，跳過
+
+    db = SessionLocal()
+    try:
+        for url in found_urls:
+            # 簡單處理：去掉無關符號
+            clean_url = url.strip()
+            
+            # 去資料庫撈撈看 (模糊搜尋，只要網址包含黑名單片段就算)
+            # 例如: database 有 'bad.com'，使用者傳 'https://bad.com/login' -> 中獎
+            # 這裡我們先做精確比對或部分比對，視需求而定
+            # 簡單版：直接查有無完全一樣的
+            match = db.query(FraudLink).filter(FraudLink.url == clean_url).first()
+            
+            if match:
+                return {
+                    "score": 100, # 滿分危險
+                    "light": "Red",
+                    "reason": f"⚠️ 警告：此網址 ({clean_url}) 已列在政府詐騙黑名單中！",
+                    "keywords": ["政府黑名單網址"]
+                }
+    finally:
+        db.close()
+    
+    return None # 網址都安全
+
 # --- API 路由區 ---
 
 class TextMessage(BaseModel):
@@ -241,12 +287,12 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
         }
     }
 
-# 雙通 (已加入協防邏輯)
+# 雙通 (已加入協防邏輯與嚴謹判斷)
 @app.post("/analyze/auto")
 async def analyze_auto(
-    user_id: str = Form(...),          # 必填：是誰傳的
-    text: str = Form(None),            # 選填：使用者打的字 (預設是 None)
-    file: UploadFile = File(None)      # 選填：使用者傳的圖 (預設是 None)
+    user_id: str = Form(...),          
+    text: Optional[str] = Form(None),       # 【修改】明確標示為可選字串
+    file: Optional[UploadFile] = File(None) # 【修改】明確標示為可選檔案
 ):
     print(f"收到 User: {user_id} 的請求...")
     
@@ -255,11 +301,11 @@ async def analyze_auto(
 
     # --- 判斷邏輯開始 ---
     
-    # 情況 1: 使用者傳了圖片 (File 優先處理)
-    if file:
+    # 情況 1: 使用者傳了圖片 (還要確保檔名不是空的，避免 Swagger UI 亂傳空字串)
+    if file and file.filename:
         print(f"偵測到圖片: {file.filename}，啟動 OCR...")
         file_content = await file.read()
-        final_content = ocr_process(file_content) # 圖片轉文字
+        final_content = ocr_process(file_content) 
         msg_type = "image"
         
     # 情況 2: 沒圖片，但是有文字
@@ -272,27 +318,34 @@ async def analyze_auto(
     else:
         return {"status": "error", "message": "請至少提供文字 (text) 或圖片 (file)"}
 
-    # --- 統一分析流程 (不管是圖還是字，現在都變成 text 了) ---
+    # --- 統一分析流程 ---
     
-    # 1. 分析風險 (關鍵字快篩)
-    risk_result = check_risk_level(final_content)
+    # 1. 第一道防線：網址黑名單檢查
+    blacklist_result = check_url_in_blacklist(final_content)
     
-    # 2. 存入資料庫
+    if blacklist_result:
+        risk_result = blacklist_result 
+        print(f"🚨 攔截到黑名單網址！User: {user_id}")
+    else:
+        # 2. 第二道防線：關鍵字檢查
+        risk_result = check_risk_level(final_content)
+    
+    # 3. 存入資料庫
     save_to_db(user_id, final_content, msg_type, risk_result)
 
-    # 3. 家庭協防檢查 (紅燈就找家人)
+    # 4. 家庭協防檢查
     notify_list = []
     if risk_result['light'] == 'Red':
         notify_list = find_family_members(user_id)
         if notify_list:
             print(f"🚨 觸發協防！請通知家人: {notify_list}")
 
-    # 4. 回傳結果
+    # 5. 回傳結果
     return {
         "status": "success",
         "user_id": user_id,
-        "mode": msg_type,               # 告訴前端你是用什麼模式處理的
-        "content": final_content,       # 最終分析的文字內容
+        "mode": msg_type,               
+        "content": final_content,       
         "risk_analysis": risk_result,
         "family_alert": {
             "triggered": len(notify_list) > 0,
