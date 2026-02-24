@@ -1,6 +1,6 @@
 import React from "react";
-import ScreenJoinCreate from "./screens/ScreenJoinCreate";
+import ScreenGroupList from "./screens/ScreenGroupList";
 
 export default function App() {
-  return <ScreenJoinCreate />;
+  return <ScreenGroupList />;
 }
