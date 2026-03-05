@@ -30,6 +30,7 @@ export default function ScreenMemberList({ navigation, route }: any) {
       { id: "m2", name: "媽媽", role: "管理員", status: "正常" },
       { id: "m3", name: "弟弟", role: "成員", status: "可疑" },
       { id: "m4", name: "我", role: "成員", status: "正常" },
+      { id: "m5", name: "阿嬤", role: "成員", status: "可疑" },
     ],
     [],
   );
@@ -71,7 +72,7 @@ export default function ScreenMemberList({ navigation, route }: any) {
 
             <View style={styles.statusPill}>
               <Text style={styles.statusPillText}>
-                {item.status === "可疑" ? "⚠️ 可疑" : "✅ 正常"}
+                {item.status === "可疑" ? "❗可疑" : " ☑ 正常"}
               </Text>
             </View>
           </View>
