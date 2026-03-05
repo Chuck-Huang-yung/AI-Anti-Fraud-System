@@ -12,7 +12,7 @@ import {
 
 type TabKey = "home" | "join_create" | "profile";
 
-export default function Screen5() {
+export default function ScreenMe() {
   // 假資料：之後接你真的資料
   const lineId = "XXXX-XXXX";
 
@@ -107,28 +107,6 @@ export default function Screen5() {
           {showId2 ? "將顯示 ID" : "將隱藏 ID"}
         </Text>
       </ScrollView>
-
-      {/* Bottom Nav：圖示 + 文字 */}
-      <View style={styles.nav}>
-        <NavItem
-          icon="🏠"
-          label="首頁"
-          active={tab === "home"}
-          onPress={() => setTab("home")}
-        />
-        <NavItem
-          icon="➕"
-          label="加入/創建"
-          active={tab === "join_create"}
-          onPress={() => setTab("join_create")}
-        />
-        <NavItem
-          icon="👤"
-          label="個人"
-          active={tab === "profile"}
-          onPress={() => setTab("profile")}
-        />
-      </View>
     </SafeAreaView>
   );
 }

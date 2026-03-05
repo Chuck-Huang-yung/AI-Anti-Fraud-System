@@ -12,34 +12,17 @@ import {
   TouchableOpacity,
 } from "react-native";
 
-type TabKey = "home" | "join" | "me";
-
 type GroupItem = {
   id: string;
   name: string;
-  muted: boolean; // true=關閉推播
+  muted: boolean;
 };
 
-type Member = {
-  id: string;
-  name: string;
-  role?: "群主" | "管理員" | "成員";
-  status?: "正常" | "可疑";
-};
-
-type Page =
-  | { name: "groupList" }
-  | { name: "memberList"; group: GroupItem };
-
-export default function ScreenGroupList() {
-  const [tab, setTab] = useState<TabKey>("home");
-
-  const [page, setPage] = useState<Page>({ name: "groupList" });
-
+export default function ScreenGroupList({ navigation }: any) {
   const [groups, setGroups] = useState<GroupItem[]>([
-    { id: "1", name: "家庭群組 A", muted: false },
-    { id: "2", name: "家人群組 B", muted: true },
-    { id: "3", name: "朋友群組 C", muted: false },
+    { id: "1", name: "阿嬤家群組", muted: false },
+    { id: "2", name: "溫暖的小窩", muted: true },
+    { id: "3", name: "朋友家", muted: false },
   ]);
 
   const [query, setQuery] = useState("");
@@ -68,10 +51,12 @@ export default function ScreenGroupList() {
     if (!g) return;
 
     const nextMuted = !g.muted;
-    setGroups((prev) => prev.map((x) => (x.id === g.id ? { ...x, muted: nextMuted } : x)));
+    setGroups((prev) =>
+      prev.map((x) => (x.id === g.id ? { ...x, muted: nextMuted } : x)),
+    );
     closeMenu();
 
-    Alert.alert("推播設定", nextMuted ? "已關閉推播（鈴鐺會出現紅線）" : "已開啟推播");
+    Alert.alert("推播設定", nextMuted ? "已關閉推播" : "已開啟推播");
   };
 
   const leaveGroup = () => {
@@ -86,8 +71,6 @@ export default function ScreenGroupList() {
         onPress: () => {
           setGroups((prev) => prev.filter((x) => x.id !== g.id));
           closeMenu();
-          // 如果剛好在成員頁且是這群 → 回列表
-          setPage((p) => (p.name === "memberList" && p.group.id === g.id ? { name: "groupList" } : p));
         },
       },
     ]);
@@ -100,39 +83,13 @@ export default function ScreenGroupList() {
     Alert.alert("審核新成員", `之後接「${g.name}」的新成員審核頁面`);
   };
 
-  // ✅ 叉叉功能：關閉目前頁面（成員頁 → 回群組列表；群組列表 → 提示）
-  const onClose = () => {
-    if (page.name === "memberList") {
-      setPage({ name: "groupList" });
-      return;
-    }
-    Alert.alert("關閉", "目前已在群組列表頁（之後可接回上一個功能頁）");
-  };
+  // Header：群組列表頁的 back/close（這頁通常不用回上一頁，就先提示）
+  const onClose = () => Alert.alert("關閉", "目前已在群組列表頁");
+  const onBack = () => Alert.alert("返回", "目前已在群組列表頁");
 
-  // ✅ 下拉箭頭：當作返回
-  const onBack = () => {
-    if (page.name === "memberList") {
-      setPage({ name: "groupList" });
-      return;
-    }
-    Alert.alert("返回", "這裡之後可接上一頁");
-  };
-
-  // 點擊群組卡片：進成員頁
   const openMembers = (g: GroupItem) => {
-    setPage({ name: "memberList", group: g });
+    navigation.navigate("MemberList", { group: g });
   };
-
-  // 成員假資料（之後你可換 API）
-  const members: Member[] = useMemo(() => {
-    if (page.name !== "memberList") return [];
-    return [
-      { id: "m1", name: "爸爸", role: "群主", status: "正常" },
-      { id: "m2", name: "媽媽", role: "管理員", status: "正常" },
-      { id: "m3", name: "弟弟", role: "成員", status: "可疑" },
-      { id: "m4", name: "我", role: "成員", status: "正常" },
-    ];
-  }, [page]);
 
   const renderHeader = (title: string) => (
     <View style={styles.header}>
@@ -148,57 +105,10 @@ export default function ScreenGroupList() {
     </View>
   );
 
-  // ------------------ UI ------------------
-
-  if (page.name === "memberList") {
-    const g = page.group;
-    return (
-      <SafeAreaView style={styles.safe}>
-        {renderHeader(g.name)}
-
-        <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
-          <Text style={styles.subTitle}>群組成員</Text>
-        </View>
-
-        <FlatList
-          data={members}
-          keyExtractor={(it) => it.id}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          renderItem={({ item }) => (
-            <View style={styles.memberCard}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.memberName}>{item.name}</Text>
-                <Text style={styles.memberMeta}>
-                  {item.role ?? "成員"} ・ {item.status ?? "正常"}
-                </Text>
-              </View>
-
-              <View style={styles.statusPill}>
-                <Text style={styles.statusPillText}>
-                  {item.status === "可疑" ? "⚠️ 可疑" : "✅ 正常"}
-                </Text>
-              </View>
-            </View>
-          )}
-        />
-
-        {/* 底部導覽（保持一致） */}
-        <View style={styles.nav}>
-          <NavItem icon="🏠" label="首頁" active={tab === "home"} onPress={() => setTab("home")} />
-          <NavItem icon="+" label="加入/創建" active={tab === "join"} onPress={() => setTab("join")} />
-          <NavItem icon="👤" label="個人" active={tab === "me"} onPress={() => setTab("me")} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // 群組列表頁
   return (
     <SafeAreaView style={styles.safe}>
       {renderHeader("查詢群組")}
 
-      {/* 搜尋框 */}
       <View style={styles.searchWrap}>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -221,7 +131,11 @@ export default function ScreenGroupList() {
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 16, paddingTop: 10, paddingBottom: 16 }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingTop: 10,
+          paddingBottom: 16,
+        }}
         renderItem={({ item }) => (
           <Pressable onPress={() => openMembers(item)} style={styles.card}>
             <Text style={styles.groupName}>{item.name}</Text>
@@ -229,7 +143,10 @@ export default function ScreenGroupList() {
             <View style={styles.rightIcons}>
               <Pressable
                 onPress={() =>
-                  Alert.alert("通知狀態", item.muted ? "目前：推播已關閉" : "目前：推播已開啟")
+                  Alert.alert(
+                    "通知狀態",
+                    item.muted ? "目前：推播已關閉" : "目前：推播已開啟",
+                  )
                 }
                 style={{ paddingHorizontal: 4, paddingVertical: 2 }}
               >
@@ -238,7 +155,6 @@ export default function ScreenGroupList() {
 
               <Pressable
                 onPress={(e) => {
-                  // 避免點三點也觸發進成員頁
                   e.stopPropagation?.();
                   openMenu(item.id);
                 }}
@@ -251,15 +167,12 @@ export default function ScreenGroupList() {
         )}
       />
 
-      {/* Bottom Nav */}
-      <View style={styles.nav}>
-        <NavItem icon="🏠" label="首頁" active={tab === "home"} onPress={() => setTab("home")} />
-        <NavItem icon="+" label="加入/創建" active={tab === "join"} onPress={() => setTab("join")} />
-        <NavItem icon="👤" label="個人" active={tab === "me"} onPress={() => setTab("me")} />
-      </View>
-
-      {/* 三點選單 */}
-      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={closeMenu}>
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeMenu}
+      >
         <Pressable style={styles.modalBackdrop} onPress={closeMenu}>
           <View />
         </Pressable>
@@ -268,7 +181,9 @@ export default function ScreenGroupList() {
           <View style={styles.sheetHandle} />
 
           <TouchableOpacity style={styles.sheetItem} onPress={toggleMute}>
-            <Text style={styles.sheetText}>{getGroup()?.muted ? "開啟推播" : "關閉推播"}</Text>
+            <Text style={styles.sheetText}>
+              {getGroup()?.muted ? "開啟推播" : "關閉推播"}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.sheetDivider} />
@@ -280,10 +195,15 @@ export default function ScreenGroupList() {
           <View style={styles.sheetDivider} />
 
           <TouchableOpacity style={styles.sheetItem} onPress={leaveGroup}>
-            <Text style={[styles.sheetText, { color: "#b91c1c" }]}>退出群組</Text>
+            <Text style={[styles.sheetText, { color: "#b91c1c" }]}>
+              退出群組
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.sheetItem, { marginTop: 8 }]} onPress={closeMenu}>
+          <TouchableOpacity
+            style={[styles.sheetItem, { marginTop: 8 }]}
+            onPress={closeMenu}
+          >
             <Text style={[styles.sheetText, { color: "#6b7280" }]}>取消</Text>
           </TouchableOpacity>
         </View>
@@ -292,41 +212,16 @@ export default function ScreenGroupList() {
   );
 }
 
-/* ---------- 小元件 ---------- */
-
 function Bell({ muted }: { muted: boolean }) {
   return (
     <View style={styles.bellWrap}>
-      <Text style={styles.bellText}>🔔</Text>
-      {muted ? <View style={styles.bellSlash} /> : null}
+      <Text style={styles.bellText}>{muted ? "🔇" : "🔈"}</Text>
     </View>
   );
 }
 
-function NavItem({
-  icon,
-  label,
-  active,
-  onPress,
-}: {
-  icon: string;
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.navItem}>
-      <Text style={[styles.navIcon, active && styles.active]}>{icon}</Text>
-      <Text style={[styles.navText, active && styles.active]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-/* ---------- Styles ---------- */
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#fff" },
-
   header: {
     height: 56,
     flexDirection: "row",
@@ -335,10 +230,13 @@ const styles = StyleSheet.create({
   },
   headerBtn: { width: 44, alignItems: "center", justifyContent: "center" },
   headerIcon: { fontSize: 22, fontWeight: "900", color: "#111827" },
-  headerTitle: { flex: 1, textAlign: "center", fontSize: 16, fontWeight: "800", color: "#111827" },
-
-  subTitle: { fontSize: 14, fontWeight: "800", color: "#111827" },
-
+  headerTitle: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#111827",
+  },
   searchWrap: { paddingHorizontal: 16, paddingBottom: 6 },
   searchBox: {
     height: 46,
@@ -352,7 +250,6 @@ const styles = StyleSheet.create({
   searchIcon: { fontSize: 16 },
   searchInput: { flex: 1, fontSize: 14, color: "#111827" },
   searchClear: { fontSize: 16, color: "#6b7280", fontWeight: "800" },
-
   card: {
     height: 60,
     borderRadius: 12,
@@ -364,55 +261,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   groupName: { fontSize: 15, fontWeight: "700", color: "#111827" },
-
   rightIcons: { flexDirection: "row", alignItems: "center", gap: 14 },
   icon: { fontSize: 18, color: "#111827" },
-
-  bellWrap: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
-  bellText: { fontSize: 18 },
-  bellSlash: {
-    position: "absolute",
-    width: 22,
-    height: 3,
-    backgroundColor: "#ef4444",
-    transform: [{ rotate: "-35deg" }],
-    borderRadius: 2,
-  },
-
-  memberCard: {
-    borderRadius: 12,
-    backgroundColor: "#f3f4f6",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: "row",
+  bellWrap: {
+    width: 24,
+    height: 24,
     alignItems: "center",
-    gap: 10,
+    justifyContent: "center",
   },
-  memberName: { fontSize: 15, fontWeight: "800", color: "#111827" },
-  memberMeta: { marginTop: 4, fontSize: 12, fontWeight: "700", color: "#6b7280" },
-
-  statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  statusPillText: { fontSize: 12, fontWeight: "900", color: "#111827" },
-
-  nav: {
-    height: 64,
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-    flexDirection: "row",
-    backgroundColor: "#fff",
-  },
-  navItem: { flex: 1, alignItems: "center", justifyContent: "center" },
-  navIcon: { fontSize: 20, color: "#6b7280" },
-  navText: { fontSize: 12, fontWeight: "700", color: "#6b7280" },
-  active: { color: "#111827" },
-
+  bellText: { fontSize: 18 },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.25)" },
   sheet: {
     position: "absolute",

@@ -27,7 +27,8 @@ const STORAGE_KEY = "fc_groups_v1";
 function makeGroupId(len = 12) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 避免 0/O 1/I
   let out = "";
-  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < len; i++)
+    out += chars[Math.floor(Math.random() * chars.length)];
   return out;
 }
 
@@ -81,7 +82,11 @@ export default function ScreenJoinCreate() {
   const onClose = () => {
     Alert.alert("關閉", "要關閉此頁面嗎？", [
       { text: "取消", style: "cancel" },
-      { text: "確定", style: "destructive", onPress: () => console.log("close") },
+      {
+        text: "確定",
+        style: "destructive",
+        onPress: () => console.log("close"),
+      },
     ]);
   };
 
@@ -118,7 +123,10 @@ export default function ScreenJoinCreate() {
 
     const g = groupMap.get(id);
     if (!g) {
-      Alert.alert("找不到此群組", "請確認 ID 是否正確，或該群組尚未在本機建立/記錄。");
+      Alert.alert(
+        "找不到此群組",
+        "請確認 ID 是否正確，或該群組尚未在本機建立/記錄。",
+      );
       return;
     }
 
@@ -164,7 +172,12 @@ export default function ScreenJoinCreate() {
             onPress={() => switchMode("create")}
             style={[styles.tab, mode === "create" && styles.tabActive]}
           >
-            <Text style={[styles.tabText, mode === "create" && styles.tabTextActive]}>
+            <Text
+              style={[
+                styles.tabText,
+                mode === "create" && styles.tabTextActive,
+              ]}
+            >
               創建
             </Text>
           </Pressable>
@@ -173,7 +186,9 @@ export default function ScreenJoinCreate() {
             onPress={() => switchMode("join")}
             style={[styles.tab, mode === "join" && styles.tabActive]}
           >
-            <Text style={[styles.tabText, mode === "join" && styles.tabTextActive]}>
+            <Text
+              style={[styles.tabText, mode === "join" && styles.tabTextActive]}
+            >
               加入
             </Text>
           </Pressable>
@@ -189,11 +204,15 @@ export default function ScreenJoinCreate() {
               style={styles.input}
             />
 
-            <Text style={[styles.label, { marginTop: 14 }]}>群組 ID（創建後固定）</Text>
+            <Text style={[styles.label, { marginTop: 14 }]}>
+              群組 ID（創建後固定）
+            </Text>
 
             <View style={styles.idRow}>
               <View style={[styles.input, styles.idBox]}>
-                <Text style={styles.idText}>{created?.id ?? "（尚未創建）"}</Text>
+                <Text style={styles.idText}>
+                  {created?.id ?? "（尚未創建）"}
+                </Text>
               </View>
 
               <Pressable
@@ -225,7 +244,8 @@ export default function ScreenJoinCreate() {
             </Pressable>
 
             <Text style={styles.hint}>
-              你輸入的 ID 會去本機「已記錄的群組清單」比對，找到就會顯示對應的群組名稱。
+              你輸入的 ID
+              會去本機「已記錄的群組清單」比對，找到就會顯示對應的群組名稱。
             </Text>
           </View>
         )}
@@ -242,28 +262,6 @@ export default function ScreenJoinCreate() {
           ))
         )}
       </ScrollView>
-
-      {/* ✅ 固定 Bottom Nav：圖示 + 文字（灰色圓圈） */}
-      <View style={styles.nav}>
-        <NavItem
-          label="首頁"
-          icon="🏠"
-          active={tab === "home"}
-          onPress={() => goTab("home")}
-        />
-        <NavItem
-          label="加入/創建"
-          icon="+"
-          active={tab === "joinCreate"}
-          onPress={() => goTab("joinCreate")}
-        />
-        <NavItem
-          label="個人"
-          icon="👤"
-          active={tab === "profile"}
-          onPress={() => goTab("profile")}
-        />
-      </View>
     </SafeAreaView>
   );
 }
@@ -283,10 +281,16 @@ function NavItem({
   return (
     <Pressable onPress={onPress} style={styles.navItem}>
       {/* 灰色圓圈 icon */}
-      <View style={[styles.navIconCircle, active && styles.navIconCircleActive]}>
-        <Text style={[styles.navIconText, active && styles.navIconTextActive]}>{icon}</Text>
+      <View
+        style={[styles.navIconCircle, active && styles.navIconCircleActive]}
+      >
+        <Text style={[styles.navIconText, active && styles.navIconTextActive]}>
+          {icon}
+        </Text>
       </View>
-      <Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text>
+      <Text style={[styles.navText, active && styles.navTextActive]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -373,7 +377,13 @@ const styles = StyleSheet.create({
 
   hint: { marginTop: 12, fontSize: 12, lineHeight: 18, color: "#6b7280" },
 
-  listTitle: { marginTop: 16, marginBottom: 10, fontSize: 13, fontWeight: "900", color: "#111827" },
+  listTitle: {
+    marginTop: 16,
+    marginBottom: 10,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827",
+  },
   empty: { fontSize: 12, color: "#6b7280" },
 
   groupRow: {

@@ -1,6 +1,6 @@
 import React from "react";
-import ScreenGroupList from "./screens/ScreenGroupList";
+import RootNavigator from "./navigation/RootNavigator";
 
 export default function App() {
-  return <ScreenGroupList />;
+  return <RootNavigator />;
 }
