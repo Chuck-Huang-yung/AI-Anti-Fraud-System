@@ -17,7 +17,13 @@ export default function AppMain({ navigation }: any) {
   const [lineId, setLineId] = useState("");
   const [nickname, setNickname] = useState("");
 
-  // 簡單格式：英數 + . _ -
+  // 1. 根據平台決定是否啟用「點擊空白處收起鍵盤」
+  const Container = (Platform.OS === "web" ? View : TouchableWithoutFeedback) as any;
+  const containerProps =
+    Platform.OS === "web"
+      ? { style: { flex: 1 } }
+      : { onPress: Keyboard.dismiss, accessible: false };
+
   const isLineIdValid = useMemo(() => {
     const v = lineId.trim();
     if (v.length < 3) return false;
@@ -52,13 +58,12 @@ export default function AppMain({ navigation }: any) {
       return;
     }
 
-    // ✅ 登入成功 → 直接進 Tabs（Home/JoinCreate/Me）
     navigation.replace("Tabs");
   };
 
   return (
     <SafeAreaView style={styles.safe}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <Container {...containerProps}>
         <KeyboardAvoidingView
           style={styles.safe}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -92,10 +97,15 @@ export default function AppMain({ navigation }: any) {
             <TextInput
               value={lineId}
               onChangeText={setLineId}
-              style={styles.input}
+              // 使用 (styles as any) 避開 TS 對 web 樣式的檢查
+              style={[
+                styles.input,
+                Platform.OS === "web" && ({ outlineStyle: "none" } as any),
+              ]}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder=""
+              placeholder="請輸入 Line ID"
+              placeholderTextColor="#9ca3af"
               returnKeyType="next"
             />
             {lineId.trim().length > 0 && !isLineIdValid ? (
@@ -106,8 +116,12 @@ export default function AppMain({ navigation }: any) {
             <TextInput
               value={nickname}
               onChangeText={setNickname}
-              style={styles.input}
-              placeholder=""
+              style={[
+                styles.input,
+                Platform.OS === "web" && ({ outlineStyle: "none" } as any),
+              ]}
+              placeholder="請輸入暱稱"
+              placeholderTextColor="#9ca3af"
               returnKeyType="done"
             />
 
@@ -120,7 +134,7 @@ export default function AppMain({ navigation }: any) {
             </Pressable>
           </View>
         </KeyboardAvoidingView>
-      </TouchableWithoutFeedback>
+      </Container>
     </SafeAreaView>
   );
 }
@@ -157,6 +171,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     fontSize: 16,
     color: "#111827",
+    // 透過 Platform.select 搭配 as any 處理網頁專用樣式
+    ...Platform.select({
+      web: {
+        cursor: "text",
+      } as any,
+    }),
   },
   helperText: { marginTop: 8, fontSize: 12, color: "#6b7280" },
   footerText: {
