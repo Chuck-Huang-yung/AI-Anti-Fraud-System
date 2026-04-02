@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert,
   SafeAreaView,
@@ -11,28 +11,23 @@ import {
   StatusBar,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// 1. 引入剛剛建立的 Context
+import { useGroups } from "../context/GroupContext";
 
 type Mode = "create" | "join";
 type TabKey = "home" | "joinCreate" | "profile";
 
+// Group 型別定義建議搬移到 Context 檔案內統一引用
 type Group = {
   id: string;
   name: string;
   createdAt: number;
 };
 
-const STORAGE_KEY = "fc_groups_v1";
-
-function makeGroupId(len = 12) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 避免 0/O 1/I
-  let out = "";
-  for (let i = 0; i < len; i++)
-    out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
-}
-
 export default function ScreenJoinCreate() {
+  // 2. 從 Context 取得資料與方法
+  const { groups, addGroup, joinGroupById } = useGroups();
+
   const [mode, setMode] = useState<Mode>("create");
   const [tab, setTab] = useState<TabKey>("joinCreate");
 
@@ -43,38 +38,13 @@ export default function ScreenJoinCreate() {
   // Join inputs
   const [joinId, setJoinId] = useState("");
 
-  // Stored groups
-  const [groups, setGroups] = useState<Group[]>([]);
+  // 3. 利用 Context 的 groups 建立 Map 供快速比對 (用於加入功能)
   const groupMap = useMemo(() => {
-    const m = new Map<string, Group>();
+    const m = new Map<string, any>();
     groups.forEach((g) => m.set(g.id, g));
     return m;
   }, [groups]);
 
-  // Load on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw) as Group[];
-        if (Array.isArray(parsed)) setGroups(parsed);
-      } catch (e) {
-        console.log("load groups error", e);
-      }
-    })();
-  }, []);
-
-  const saveGroups = async (next: Group[]) => {
-    setGroups(next);
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch (e) {
-      console.log("save groups error", e);
-    }
-  };
-
-  // ✅ 固定模板：左上返回、右上叉叉
   const onBack = () => {
     Alert.alert("返回", "這裡之後可接上一頁（navigation）");
   };
@@ -90,6 +60,7 @@ export default function ScreenJoinCreate() {
     ]);
   };
 
+  // 4. 改用 Context 的 addGroup
   const onCreate = async () => {
     const name = groupName.trim();
     if (!name) {
@@ -97,15 +68,15 @@ export default function ScreenJoinCreate() {
       return;
     }
 
-    let id = makeGroupId(12);
-    while (groupMap.has(id)) id = makeGroupId(12);
-
-    const newGroup: Group = { id, name, createdAt: Date.now() };
-    const next = [newGroup, ...groups];
-    await saveGroups(next);
-
-    setCreated(newGroup);
-    Alert.alert("已創建完成", `群組名稱：${name}`);
+    try {
+      // 呼叫 Context 的方法，它內部會處理存檔與狀態更新
+      const newGroup = await addGroup(name);
+      setCreated(newGroup);
+      setGroupName("");
+      Alert.alert("已創建完成", `群組名稱：${name}`);
+    } catch (e) {
+      Alert.alert("錯誤", "無法創建群組");
+    }
   };
 
   const onCopyId = async () => {
@@ -114,6 +85,7 @@ export default function ScreenJoinCreate() {
     Alert.alert("已複製群組 ID", created.id);
   };
 
+  // 5. 改用 Context 的邏輯
   const onJoin = async () => {
     const id = joinId.trim().toUpperCase();
     if (!id) {
@@ -121,6 +93,7 @@ export default function ScreenJoinCreate() {
       return;
     }
 
+    // 這裡我們比對 groupMap 是否有這筆資料
     const g = groupMap.get(id);
     if (!g) {
       Alert.alert(
@@ -130,8 +103,8 @@ export default function ScreenJoinCreate() {
       return;
     }
 
-    // ✅ 顯示群組名稱
     Alert.alert("已加入", `群組名稱：${g.name}`);
+    setJoinId("");
   };
 
   const switchMode = (m: Mode) => {
@@ -139,19 +112,11 @@ export default function ScreenJoinCreate() {
     setCreated(null);
   };
 
-  // ✅ 底部導覽列：先做 UI（之後接 navigation）
-  const goTab = (k: TabKey) => {
-    setTab(k);
-    if (k === "home") Alert.alert("首頁", "之後接首頁頁面");
-    if (k === "joinCreate") Alert.alert("加入/創建", "目前頁面");
-    if (k === "profile") Alert.alert("個人", "之後接個人設定頁");
-  };
-
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
 
-      {/* ✅ 固定 Header：左下拉箭頭、右叉叉 */}
+      {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={onBack} hitSlop={12} style={styles.iconBtn}>
           <Text style={styles.iconText}>⌄</Text>
@@ -164,7 +129,6 @@ export default function ScreenJoinCreate() {
         </Pressable>
       </View>
 
-      {/* Body */}
       <ScrollView contentContainerStyle={styles.body}>
         {/* Tabs */}
         <View style={styles.tabs}>
@@ -244,13 +208,12 @@ export default function ScreenJoinCreate() {
             </Pressable>
 
             <Text style={styles.hint}>
-              你輸入的 ID
-              會去本機「已記錄的群組清單」比對，找到就會顯示對應的群組名稱。
+              你輸入的 ID 會與本機記錄比對，找到後即可顯示名稱。
             </Text>
           </View>
         )}
 
-        <Text style={styles.listTitle}>已記錄群組（本機）</Text>
+        <Text style={styles.listTitle}>已記錄群組（本機共享）</Text>
         {groups.length === 0 ? (
           <Text style={styles.empty}>目前還沒有記錄任何群組</Text>
         ) : (
@@ -263,35 +226,6 @@ export default function ScreenJoinCreate() {
         )}
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-/* ---------- Bottom Nav Item ---------- */
-function NavItem({
-  label,
-  icon,
-  active,
-  onPress,
-}: {
-  label: string;
-  icon: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.navItem}>
-      {/* 灰色圓圈 icon */}
-      <View
-        style={[styles.navIconCircle, active && styles.navIconCircleActive]}
-      >
-        <Text style={[styles.navIconText, active && styles.navIconTextActive]}>
-          {icon}
-        </Text>
-      </View>
-      <Text style={[styles.navText, active && styles.navTextActive]}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 

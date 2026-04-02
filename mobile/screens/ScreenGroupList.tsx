@@ -80,7 +80,7 @@ export default function ScreenGroupList({ navigation }: any) {
     const g = getGroup();
     if (!g) return;
     closeMenu();
-    Alert.alert("審核新成員", `之後接「${g.name}」的新成員審核頁面`);
+    navigation.navigate("ReviewMembers", { group: g });
   };
 
   // Header：群組列表頁的 back/close（這頁通常不用回上一頁，就先提示）
