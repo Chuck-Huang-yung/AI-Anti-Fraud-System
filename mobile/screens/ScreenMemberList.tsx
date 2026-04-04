@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import {
   SafeAreaView,
   View,
@@ -6,24 +6,23 @@ import {
   Pressable,
   FlatList,
   StyleSheet,
+  Platform,
 } from "react-native";
 
 type GroupItem = { id: string; name: string; muted: boolean };
+
 type Member = {
   id: string;
   name: string;
-  role?: "管理員" | "成員";
-  status?: "正常" | "可疑";
+  role: "管理員" | "成員";
+  status: "正常" | "可疑";
 };
 
 export default function ScreenMemberList({ navigation, route }: any) {
-  const g: GroupItem = route.params.group;
-  const [tab] = useState<"home" | "join" | "me">("home"); // 你如果不需要可刪
+  // 取得從上一頁傳過來的群組資訊
+  const group: GroupItem = route.params?.group || { name: "未知群組" };
 
-  const openMembers = (g: GroupItem) => {
-    navigation.navigate("MemberList", { group: g });
-  };
-
+  // 模擬成員資料（之後可以從 API 取得）
   const members: Member[] = useMemo(
     () => [
       { id: "m1", name: "爸爸", role: "管理員", status: "正常" },
@@ -32,53 +31,58 @@ export default function ScreenMemberList({ navigation, route }: any) {
       { id: "m4", name: "我", role: "成員", status: "正常" },
       { id: "m5", name: "阿嬤", role: "成員", status: "可疑" },
     ],
-    [],
+    []
   );
 
-  const onClose = () => navigation.goBack();
   const onBack = () => navigation.goBack();
 
   return (
     <SafeAreaView style={styles.safe}>
+      {/* Header - 點擊標題可返回 */}
       <View style={styles.header}>
-        <Pressable style={styles.headerBtn} onPress={onBack} hitSlop={12}>
-          <Text style={styles.headerIcon}>⌄</Text>
-        </Pressable>
-
-        <Text style={styles.headerTitle}>{g.name}</Text>
-
-        <Pressable style={styles.headerBtn} onPress={onClose} hitSlop={12}>
-          <Text style={styles.headerIcon}>✕</Text>
+        <Pressable 
+          style={styles.headerTitleContainer} 
+          onPress={onBack}
+          hitSlop={10}
+        >
+          <Text style={styles.headerTitle}>{group.name}</Text>
         </Pressable>
       </View>
 
-      <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
-        <Text style={styles.subTitle}>群組成員</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.subTitle}>群組成員 ({members.length})</Text>
       </View>
 
       <FlatList
         data={members}
-        keyExtractor={(it) => it.id}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         renderItem={({ item }) => (
           <View style={styles.memberCard}>
-            <View style={{ flex: 1 }}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+            </View>
+            
+            <View style={styles.memberInfo}>
               <Text style={styles.memberName}>{item.name}</Text>
-              <Text style={styles.memberMeta}>
-                {item.role ?? "成員"} ・ {item.status ?? "正常"}
-              </Text>
+              <Text style={styles.memberRole}>{item.role}</Text>
             </View>
 
-            <View style={styles.statusPill}>
-              <Text style={styles.statusPillText}>
-                {item.status === "可疑" ? "❗可疑" : " ☑ 正常"}
+            <View style={[
+              styles.statusTag, 
+              item.status === "可疑" ? styles.statusAlert : styles.statusNormal
+            ]}>
+              <Text style={[
+                styles.statusText,
+                item.status === "可疑" ? styles.statusTextAlert : styles.statusTextNormal
+              ]}>
+                {item.status === "可疑" ? "⚠ 可疑" : "✓ 正常"}
               </Text>
             </View>
           </View>
         )}
       />
-      {/* 注意：不要在這裡放底部 nav，Tabs 會統一顯示 */}
     </SafeAreaView>
   );
 }
@@ -89,41 +93,109 @@ const styles = StyleSheet.create({
     height: 56,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
+    justifyContent: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
   },
-  headerBtn: { width: 44, alignItems: "center", justifyContent: "center" },
-  headerIcon: { fontSize: 22, fontWeight: "900", color: "#111827" },
-  headerTitle: {
+  headerTitleContainer: {
     flex: 1,
-    textAlign: "center",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  sectionHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
+  },
+  subTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#6b7280",
+    letterSpacing: 0.5,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 30,
+  },
+  separator: {
+    height: 12,
+  },
+  memberCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f9fafb",
+    padding: 12,
+    borderRadius: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: "0px 1px 3px rgba(0,0,0,0.1)",
+      } as any,
+    }),
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#4b5563",
+  },
+  memberInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  memberName: {
     fontSize: 16,
     fontWeight: "800",
     color: "#111827",
   },
-  subTitle: { fontSize: 14, fontWeight: "800", color: "#111827" },
-  memberCard: {
-    borderRadius: 12,
-    backgroundColor: "#f3f4f6",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  memberName: { fontSize: 15, fontWeight: "800", color: "#111827" },
-  memberMeta: {
-    marginTop: 4,
+  memberRole: {
     fontSize: 12,
-    fontWeight: "700",
-    color: "#6b7280",
+    fontWeight: "600",
+    color: "#9ca3af",
+    marginTop: 2,
   },
-  statusPill: {
+  statusTag: {
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#fff",
+    paddingVertical: 6,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
   },
-  statusPillText: { fontSize: 12, fontWeight: "900", color: "#111827" },
+  statusNormal: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#10b981",
+  },
+  statusAlert: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#ef4444",
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  statusTextNormal: {
+    color: "#059669",
+  },
+  statusTextAlert: {
+    color: "#dc2626",
+  },
 });

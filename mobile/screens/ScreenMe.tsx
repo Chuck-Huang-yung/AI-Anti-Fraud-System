@@ -8,27 +8,17 @@ import {
   Pressable,
   ScrollView,
   TextInput,
+  Platform,
 } from "react-native";
 
-type TabKey = "home" | "join_create" | "profile";
-
 export default function ScreenMe() {
-  // 假資料：之後接你真的資料
+  // 假資料
   const lineId = "XXXX-XXXX";
 
   const [nickname, setNickname] = React.useState("使用者暱稱");
-  const [showId, setShowId] = React.useState(true); // 顯示 ID
-  const [notificationsOff, setNotificationsOff] = React.useState(false); // 是否關閉通知（true=關閉）
-  const [showId2, setShowId2] = React.useState(true); // 是否顯示 ID（你要求再一個圈叉）
-
-  const [tab, setTab] = React.useState<TabKey>("profile");
-
-  const onBack = () => Alert.alert("返回", "這裡之後可接上一頁");
-  const onClose = () =>
-    Alert.alert("關閉", "要關閉此頁面嗎？", [
-      { text: "取消", style: "cancel" },
-      { text: "確定", style: "destructive" },
-    ]);
+  const [showId, setShowId] = React.useState(true); 
+  const [notificationsOff, setNotificationsOff] = React.useState(false); 
+  const [showId2, setShowId2] = React.useState(true); 
 
   const onChangeAvatar = () => {
     Alert.alert("修改頭像", "這裡之後可接相簿/相機選擇（先保留灰色圓圈）");
@@ -36,21 +26,15 @@ export default function ScreenMe() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
+      {/* Header - 已移除左右圖示並置中 */}
       <View style={styles.header}>
-        <Pressable onPress={onBack} hitSlop={12} style={styles.iconBtn}>
-          <Text style={styles.iconText}>⌄</Text>
-        </Pressable>
-
-        <Text style={styles.headerTitle}>個人設定</Text>
-
-        <Pressable onPress={onClose} hitSlop={12} style={styles.iconBtn}>
-          <Text style={styles.iconText}>✕</Text>
-        </Pressable>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>個人設定</Text>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* 1) 修改頭像（點一下） */}
+        {/* 1) 修改頭像 */}
         <Pressable onPress={onChangeAvatar} style={styles.row}>
           <View style={styles.left}>
             <View style={styles.avatarCircle} />
@@ -61,15 +45,19 @@ export default function ScreenMe() {
 
         <View style={styles.divider} />
 
-        {/* 2) 修改暱稱（輸入框） */}
+        {/* 2) 修改暱稱 */}
         <View style={styles.row}>
           <Text style={styles.rowLabel}>修改暱稱</Text>
         </View>
         <TextInput
           value={nickname}
           onChangeText={setNickname}
-          style={styles.input}
+          style={[
+            styles.input,
+            Platform.OS === "web" && ({ outlineStyle: "none" } as any),
+          ]}
           placeholder="輸入暱稱"
+          placeholderTextColor="#9ca3af"
         />
 
         <View style={styles.divider} />
@@ -87,7 +75,7 @@ export default function ScreenMe() {
 
         <View style={styles.divider} />
 
-        {/* 4) 是否關閉通知（圈圈/叉叉） */}
+        {/* 4) 是否關閉通知 */}
         <View style={styles.row}>
           <Text style={styles.rowLabel}>是否關閉通知</Text>
           <OX value={notificationsOff} onChange={setNotificationsOff} />
@@ -98,7 +86,7 @@ export default function ScreenMe() {
 
         <View style={styles.divider} />
 
-        {/* 5) 是否顯示 ID（圈圈/叉叉） */}
+        {/* 5) 是否顯示 ID */}
         <View style={styles.row}>
           <Text style={styles.rowLabel}>是否顯示 ID</Text>
           <OX value={showId2} onChange={setShowId2} />
@@ -138,25 +126,6 @@ function OX({
   );
 }
 
-function NavItem({
-  icon,
-  label,
-  active,
-  onPress,
-}: {
-  icon: string;
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.navItem}>
-      <Text style={[styles.navIcon, active && styles.navActive]}>{icon}</Text>
-      <Text style={[styles.navText, active && styles.navActive]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#fff" },
 
@@ -164,22 +133,18 @@ const styles = StyleSheet.create({
     height: 54,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
+    justifyContent: "center",
   },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  headerTitleContainer: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  iconText: { fontSize: 20, color: "#111827" },
   headerTitle: {
-    flex: 1,
-    textAlign: "center",
     fontSize: 16,
     fontWeight: "900",
     color: "#111827",
+    textAlign: "center",
   },
 
   content: {
@@ -215,6 +180,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#111827",
     marginBottom: 10,
+    ...Platform.select({
+      web: { cursor: "text" } as any,
+    }),
   },
 
   hint: {
@@ -244,16 +212,4 @@ const styles = StyleSheet.create({
   oxBtnActive: { backgroundColor: "#111827" },
   oxText: { fontSize: 18, fontWeight: "900", color: "#111827" },
   oxTextActive: { color: "#fff" },
-
-  nav: {
-    height: 62,
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-    flexDirection: "row",
-    backgroundColor: "#fff",
-  },
-  navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 2 },
-  navIcon: { fontSize: 18, color: "#6b7280" },
-  navText: { fontSize: 12, fontWeight: "900", color: "#6b7280" },
-  navActive: { color: "#111827" },
 });
