@@ -30,17 +30,6 @@ export default function AppMain({ navigation }: any) {
     return /^[a-zA-Z0-9._-]+$/.test(v);
   }, [lineId]);
 
-  const onClose = () => {
-    Alert.alert("關閉", "要關閉此頁面嗎？", [
-      { text: "取消", style: "cancel" },
-      {
-        text: "確定",
-        style: "destructive",
-        onPress: () => console.log("close"),
-      },
-    ]);
-  };
-
   const onNext = () => {
     const id = lineId.trim();
     const name = nickname.trim();
@@ -68,21 +57,8 @@ export default function AppMain({ navigation }: any) {
           style={styles.safe}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          {/* Header */}
+          {/* Header - 左右按鈕已移除 */}
           <View style={styles.header}>
-            <Pressable
-              onPress={() => navigation.goBack?.()}
-              hitSlop={12}
-              style={styles.iconBtn}
-            >
-              <Text style={styles.iconText}>⌄</Text>
-            </Pressable>
-
-            <View style={{ flex: 1 }} />
-
-            <Pressable onPress={onClose} hitSlop={12} style={styles.iconBtn}>
-              <Text style={styles.iconText}>✕</Text>
-            </Pressable>
           </View>
 
           {/* Content */}
@@ -97,7 +73,6 @@ export default function AppMain({ navigation }: any) {
             <TextInput
               value={lineId}
               onChangeText={setLineId}
-              // 使用 (styles as any) 避開 TS 對 web 樣式的檢查
               style={[
                 styles.input,
                 Platform.OS === "web" && ({ outlineStyle: "none" } as any),
@@ -129,9 +104,11 @@ export default function AppMain({ navigation }: any) {
               如成員有詐騙警告將會立即通知全體群組成員
             </Text>
 
-            <Pressable onPress={onNext} style={styles.nextBtn}>
-              <Text style={styles.nextBtnText}>下一步</Text>
-            </Pressable>
+            <View style={{ marginTop: 24 }}>
+              <Pressable onPress={onNext} style={styles.nextBtn}>
+                <Text style={styles.nextBtnText}>下一步</Text>
+              </Pressable>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Container>
@@ -145,16 +122,9 @@ const styles = StyleSheet.create({
     height: 52,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 14,
   },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconText: { fontSize: 20, color: "#111827" },
   content: { paddingHorizontal: 18, paddingTop: 6 },
   title: {
     fontSize: 18,
@@ -171,7 +141,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     fontSize: 16,
     color: "#111827",
-    // 透過 Platform.select 搭配 as any 處理網頁專用樣式
     ...Platform.select({
       web: {
         cursor: "text",
@@ -186,7 +155,6 @@ const styles = StyleSheet.create({
     color: "#111827",
   },
   nextBtn: {
-    marginTop: 24,
     height: 52,
     borderRadius: 10,
     backgroundColor: "#111827",
