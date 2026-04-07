@@ -1,7 +1,0 @@
-node_modules/
-.env
-messages.jsonl
-monitor_state.json
-.package-lock.json
-__pycache__/
-*.pyc

@@ -1,3 +1,24 @@
-/venv
-/__pycache__
-/credentials.json
+# 1. 機密金鑰與環境變數 (🛑 絕對不可上傳)
+.env
+line_bot/.env
+credentials.json
+
+# 2. Python 大腦相關
+.venv/
+__pycache__/
+*.pyc
+backend_api/__pycache__/
+
+# 3. Node.js 嘴巴相關
+node_modules/
+line_bot/node_modules/
+
+# 4. 本機測試資料與名單 (不該推上雲端)
+*.jsonl
+line_bot/messages.jsonl
+line_bot/users.json
+line_bot/monitor_state.json
+
+# 5. 系統預設檔案
+.DS_Store
+Thumbs.db
