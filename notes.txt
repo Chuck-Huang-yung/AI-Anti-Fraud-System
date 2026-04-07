@@ -6,3 +6,13 @@
 SELECT * FROM message_logs ORDER BY id DESC;
 
 { "user_id": "User_Son", "content": "您的帳戶涉及洗錢，將被監管帳戶，請匯款至..." }
+
+
+// 🛑 為了節省額度，改用手動指定的 VIP 白名單進行推播
+    const allUserIds = [
+      "U8d8577b27ed43e840556533c3676cb1f", // 你的 LINE ID
+      // "Uxxxxxxx...", // 如果有其他組員要看推播，把他們的 ID 補在這裡
+    ];
+
+    
+deactivate

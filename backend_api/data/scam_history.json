@@ -1,0 +1,17 @@
+[
+  {
+    "pattern": "解除分期",
+    "risk_level": "Red",
+    "reply_text": "這很可能是詐騙（解除分期/ATM 操作常見話術），請勿依指示操作。"
+  },
+  {
+    "pattern": "點擊連結",
+    "risk_level": "Red",
+    "reply_text": "疑似釣魚詐騙連結，請勿點擊並確認網址來源。"
+  },
+  {
+    "pattern": "帳戶異常",
+    "risk_level": "Yellow",
+    "reply_text": "可能是詐騙訊息（帳戶異常常用來製造恐慌），請先向官方管道查證。"
+  }
+]
