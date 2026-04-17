@@ -5,7 +5,6 @@ interface Member { userId: string; userName: string; role: "管理員" | "成員
 interface Group { id: string; name: string; status: "正常" | "可疑"; createdAt: number; members: Member[]; muted: boolean; }
 interface PendingMember { userId: string; userName: string; groupId: string; }
 
-// 🌟 修正後的型別定義，包含了 createGroup
 interface GroupContextType {
   groups: Group[]; 
   setGroups: (update: Group[] | ((prev: Group[]) => Group[])) => void;
@@ -17,18 +16,16 @@ interface GroupContextType {
 }
 
 const GroupContext = createContext<GroupContextType | undefined>(undefined);
-const MY_GROUPS_KEY = "fc_my_groups_v4"; 
-const GLOBAL_DB_KEY = "fc_global_db_v4"; 
+const MY_GROUPS_KEY = "fc_my_groups_v5"; 
+const GLOBAL_DB_KEY = "fc_global_db_v5"; 
 
 export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [groups, _setGroups] = useState<Group[]>([]);
-  
-  // 🌟 預設 4 位測試成員，方便示範
   const [pendingRequests, setPendingRequests] = useState<PendingMember[]>([
-    { userId: "user_01", userName: "王小明", groupId: "7CD9QCC" },
-    { userId: "user_02", userName: "李美玲", groupId: "7CD9QCC" },
-    { userId: "user_03", userName: "陳大華", groupId: "7CD9QCC" },
-    { userId: "user_04", userName: "林雅婷", groupId: "7CD9QCC" },
+    { userId: "user_01", userName: "王小明", groupId: "DEMO123" },
+    { userId: "user_02", userName: "李美玲", groupId: "DEMO123" },
+    { userId: "user_03", userName: "陳大華", groupId: "DEMO123" },
+    { userId: "user_04", userName: "林雅婷", groupId: "DEMO123" },
   ]);
 
   const setGroups = useCallback((update: Group[] | ((prev: Group[]) => Group[])) => {
@@ -43,9 +40,8 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     AsyncStorage.getItem(MY_GROUPS_KEY).then(raw => { if (raw) _setGroups(JSON.parse(raw)); });
   }, []);
 
-  // 創建群組邏輯：僅回傳 ID
   const createGroup = async (groupName: string) => {
-    const newId = Math.random().toString(36).substring(2, 10).toUpperCase();
+    const newId = Math.random().toString(36).substring(2, 9).toUpperCase();
     const newGroup: Group = {
       id: newId, name: groupName, status: "正常", createdAt: Date.now(), muted: false,
       members: [{ userId: "admin", userName: "管理員", role: "管理員", status: "正常" }],
@@ -72,7 +68,8 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const applicant = pendingRequests.find(r => r.userId === userId);
       if (applicant) {
         setGroups(prev => prev.map(g => {
-          if (g.id === groupId || g.id === prev[0].id) {
+          const isTarget = g.id === groupId || g.id === prev[0]?.id;
+          if (isTarget) {
             return { ...g, members: [...g.members, { userId: applicant.userId, userName: applicant.userName, role: "成員", status: "正常" }] };
           }
           return g;
