@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "詐雞掰家庭群組",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -24,7 +24,8 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "description": "歡迎使用家庭群組功能，請透過以下網址開始使用吧！"
     }
   }
 }
