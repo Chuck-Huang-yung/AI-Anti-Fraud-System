@@ -1,7 +1,15 @@
+import os
 import base64
 import re
+import requests
+import google.generativeai as genai
+from dotenv import load_dotenv
 from google.cloud import vision
 from google.oauth2 import service_account
+
+# 啟動環境變數載入器 (這行非常重要，它會去讀取 backend_api 裡面的 .env)
+load_dotenv()
+
 # --- 資料庫套件 ---
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
@@ -15,7 +23,7 @@ from pathlib import Path
 
 from history_checker import HistoryChecker
 from fastapi import Body
-import google.generativeai as genai
+
 
 app = FastAPI(title="Fraud Analysis Core API")
 SQLALCHEMY_DATABASE_URL = "postgresql://postgres:0509@localhost/fraud_db"
@@ -26,7 +34,9 @@ Base = declarative_base()
 # AI 設定
 # ---------
 # 請在此處貼上你剛申請的 API Key
-genai.configure(api_key="AIzaSyBIBrg7QQHhhr9lEeTkpfFGM413R5mqSlc")
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+GOOGLE_SAFE_BROWSING_KEY = os.getenv("GOOGLE_SAFE_BROWSING_KEY")
 
 try:
     # 1. 取得所有支援生成內容的模型名稱
@@ -284,6 +294,90 @@ def check_risk_level(text):
             "reply_text": "✅ 系統判定分數：0 分\n目前未偵測到明顯詐騙關鍵字，但仍請保持警覺。"
         }
 
+# --- 外部 API 1: Google Safe Browsing ---
+def check_google_safe_browsing(text):
+    """抓取文字中的網址，丟給 Google 檢查是否為惡意網站"""
+    # 用正則表達式把網址找出來
+    url_pattern = re.compile(r'https?://[^\s]+|www\.[^\s]+')
+    found_urls = url_pattern.findall(text)
+    
+    if not found_urls:
+        return None # 沒網址就不檢查
+        
+    api_url = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={GOOGLE_SAFE_BROWSING_KEY}"
+    
+    # 按照 Google 規定的格式打包網址
+    payload = {
+        "client": {"clientId": "my-anti-fraud-bot", "clientVersion": "1.0"},
+        "threatInfo": {
+            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "POTENTIALLY_HARMFUL_APPLICATION"],
+            "platformTypes": ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries": [{"url": u} for u in found_urls]
+        }
+    }
+    
+    try:
+        res = requests.post(api_url, json=payload, timeout=5)
+        data = res.json()
+        
+        # 🚨 如果回傳的 JSON 裡面有 matches，代表是認證的惡意網站！
+        if "matches" in data:
+            bad_url = data["matches"][0]["threat"]["url"]
+            return {
+                "risk_level": "Red",
+                "score": 100,
+                "reply_text": f"🚨 系統判定分數：100 分\n⚠️ 嚴重警告：Google 資安系統判定「{bad_url}」為惡意釣魚/木馬網站，絕對不要點擊！"
+            }
+    except Exception as e:
+        print(f"❌ Google API 連線錯誤: {e}")
+        
+    return None
+
+# --- 外部 API 2: Cofacts 真的假的 ---
+def check_cofacts_api(text):
+    """比對 Cofacts 查核資料庫 (使用 GraphQL 語法)"""
+    # 字數太少就不用浪費時間查了
+    if len(text) < 10: 
+        return None 
+
+    url = "https://cofacts.api.g0v.tw/graphql"
+    
+    # GraphQL 的查詢語法 (找最相似的一筆資料)
+    query = """
+    query($text: String!) {
+      ListArticles(filter: {moreLikeThis: {like: $text}}, first: 1) {
+        edges {
+          node {
+            articleReplies {
+              reply {
+                type
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    try:
+        res = requests.post(url, json={"query": query, "variables": {"text": text}}, timeout=5)
+        data = res.json()
+        
+        edges = data.get("data", {}).get("ListArticles", {}).get("edges", [])
+        if edges:
+            # 檢查第一筆最像的資料，看有沒有查核員標記它為 RUMOR (不實訊息)
+            replies = edges[0].get("node", {}).get("articleReplies", [])
+            for r in replies:
+                if r.get("reply", {}).get("type") == "RUMOR":
+                    return {
+                        "risk_level": "Red",
+                        "score": 100,
+                        "reply_text": "🚨 系統判定分數：100 分\n⚠️ 警告：這段文字已被【Cofacts 真的假的】查核平台標記為「不實訊息或詐騙」，請千萬不要上當！"
+                    }
+    except Exception as e:
+        print(f"❌ Cofacts 連線錯誤: {e}")
+        
+    return None
 
 # --- API 路由分流 ---
 # ⚠️ 注意：這裡把 response_model=AnalyzeResponse 拿掉了，讓回傳格式更自由
@@ -309,14 +403,29 @@ def analyze(req: AnalyzeRequest = Body(...)):
 
     print(f"👤 開始分析文字：{final_text[:20]}...")
 
-    # 防線 2：比對政府網址黑名單
-    risk_result = check_url_in_blacklist(final_text)
+    # ==========================================
+    # 🛡️ 核心防詐判斷邏輯 (瀑布式篩選)
+    # ==========================================
+    risk_result = None
+
+    # 防線 2：Google Safe Browsing 網址安全檢測 (外部 API)
+    risk_result = check_google_safe_browsing(final_text)
+
+    # 防線 3：Cofacts 真的假的 假訊息比對 (外部 API)
+    if not risk_result:
+        risk_result = check_cofacts_api(final_text)
+
+    # 防線 4：比對政府網址黑名單 (你原本的本地資料庫)
+    if not risk_result:
+        risk_result = check_url_in_blacklist(final_text)
     
-    # 防線 3：如果網址沒中，比對關鍵字
+    # 防線 5：如果前面的最高風險都沒中，啟動百大關鍵字權重 (你原本的邏輯)
     if not risk_result:
         risk_result = check_risk_level(final_text)
 
-    # 存檔 (記得把你原本的 save_to_db 加上 msg_type 以利後續分析)
+    # ==========================================
+
+    # 存檔 (完美銜接你原本寫好的邏輯，完全不用動)
     save_to_db(user_id, final_text, risk_result["risk_level"], risk_result["score"])
 
     return {
