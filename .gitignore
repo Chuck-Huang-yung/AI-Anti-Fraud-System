@@ -22,3 +22,7 @@ line_bot/monitor_state.json
 # 5. 系統預設檔案
 .DS_Store
 Thumbs.db
+
+# 6. 忽略原始 CSV 備份資料夾與檔案
+backend_api/raw_csv_backup/
+*.csv

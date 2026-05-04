@@ -140,6 +140,17 @@ class FraudLink(Base):
 
 Base.metadata.create_all(bind=engine)
 
+# 
+class FraudURL(Base):
+    __tablename__ = "fraud_urls"
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(String(2048), index=True, unique=True)
+    description = Column(String(500))
+    source = Column(String(100))
+
+Base.metadata.create_all(bind=engine)
+#
+
 CREDENTIALS_FILE = "../credentials.json"
 
 def ocr_process(base64_img):
@@ -156,26 +167,45 @@ def ocr_process(base64_img):
         return ""
 
 def check_url_in_blacklist(text):
-    """檢查文字中是否包含黑名單網址"""
+    """檢查文字中的網址是否存在於 10 萬筆政府黑名單資料庫中"""
+    
+    # 用正則表達式把使用者傳來文字裡的「所有網址」抓出來
     url_pattern = re.compile(r'https?://[^\s]+|www\.[^\s]+')
     found_urls = url_pattern.findall(text)
+    
     if not found_urls:
-        return None 
+        return None # 沒找到網址就直接放行，讓下一關處理
 
     db = SessionLocal()
     try:
+        # 逐一檢查抓出來的每一個網址
         for url in found_urls:
-            clean_url = url.strip()
-            match = db.query(FraudLink).filter(FraudLink.url == clean_url).first()
-            if match:
+            # 清理網址，確保比對準確 (去掉頭尾空白，或一些奇怪的結尾符號)
+            clean_url = url.strip(".,!?\"'")
+            
+            # 🚀 在 10 萬筆資料中進行秒殺查詢 (使用 FraudURL)
+            bad_site = db.query(FraudURL).filter(FraudURL.url.contains(clean_url)).first()
+            
+            if bad_site:
+                # 只要中了一個惡意網址，直接亮紅燈並回傳詳細資料！
                 return {
                     "risk_level": "Red",
                     "score": 100,
-                    "reply_text": f"🚨 系統判定分數：100 分\n⚠️ 警告：偵測到危險網址「{clean_url}」，該連結已列在政府防詐黑名單中，絕對不要點擊！"
+                    "reply_text": (
+                        f"🚨 系統判定分數：100 分\n"
+                        f"⚠️ 嚴重警告：此網址已列入政府黑名單！\n"
+                        f"----------------------\n"
+                        f"❌ 惡意網址：{bad_site.url}\n"
+                        f"🏷️ 網站類型：{bad_site.description}\n"
+                        f"🏛️ 通報來源：{bad_site.source}\n"
+                        f"----------------------\n"
+                        f"請立即停止點擊並封鎖對方！"
+                    )
                 }
     finally:
-        db.close()
-    return None
+        db.close() # 記得關閉資料庫連線
+
+    return None # 如果所有網址都很安全，就放行
 
 class MessageLog(Base):
     __tablename__ = "message_logs"
