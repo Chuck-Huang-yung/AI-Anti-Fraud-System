@@ -202,6 +202,18 @@ def check_url_in_blacklist(text):
                         f"請立即停止點擊並封鎖對方！"
                     )
                 }
+            old_bad_site = db.query(FraudLink).filter(FraudLink.url == clean_url).first()
+            
+            if old_bad_site:
+                return {
+                    "risk_level": "Red",
+                    "score": 100,
+                    "reply_text": (
+                        f"🚨 系統判定分數：100 分\n"
+                        f"⚠️ 嚴重警告：偵測到危險網址「{clean_url}」\n"
+                        f"該連結已列在早期防詐黑名單中，絕對不要點擊！"
+                    )
+                }
     finally:
         db.close() # 記得關閉資料庫連線
 
