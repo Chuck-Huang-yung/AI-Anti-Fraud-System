@@ -281,7 +281,7 @@ FRAUD_KEYWORDS_WEIGHTED = {
 
     # 🟡 中高風險字 (投資、求職與貸款陷阱 - 40分)
     # 假投資與飆股
-    "保證金": 40, "飆股": 40, "保證獲利": 40, "穩賺不賠": 40, "老師帶單": 40, "助理小編": 40, "投資群組": 40,
+    "保證金": 40, "飆股": 40, "轉傳": 40, "轉發": 40, "保證獲利": 40, "穩賺不賠": 40, "老師帶單": 40, "助理小編": 40, "投資群組": 40,
     "內線消息": 40, "高報酬": 40, "無風險": 40, "泰達幣": 40, "USDT": 40, "虛擬貨幣": 40, "智能合約": 40, "幣商": 40,
     # 假求職與金融異常
     "刷單": 40, "搶單": 40, "打字兼職": 40, "輕鬆賺錢": 40, "在家工作": 40, "日領現金": 40, "點讚任務": 40, "佣金": 40,
@@ -376,19 +376,20 @@ def check_google_safe_browsing(text):
         
     return None
 
-# --- 外部 API 2: Cofacts 真的假的 ---
 def check_cofacts_api(text):
-    """比對 Cofacts 查核資料庫 (使用 GraphQL 語法)"""
-    # 字數太少就不用浪費時間查了
+    """比對 Cofacts 查核資料庫 (放寬搜尋範圍版)"""
     if len(text) < 10: 
         return None 
 
-    url = "https://cofacts.api.g0v.tw/graphql"
+    # 【放寬秘訣 1：過濾雜訊】把標點符號與特殊字元拿掉，讓搜尋引擎聚焦在詞彙
+    clean_text = re.sub(r'[^\w\s]', '', text) 
+
+    url = "https://api.cofacts.tw/graphql"
     
-    # GraphQL 的查詢語法 (找最相似的一筆資料)
+    # 【放寬秘訣 2：擴大打擊面】把 first 提升到 10，檢查前 10 名最像的文章
     query = """
     query($text: String!) {
-      ListArticles(filter: {moreLikeThis: {like: $text}}, first: 1) {
+      ListArticles(filter: {moreLikeThis: {like: $text}}, orderBy: [{_score: DESC}], first: 10) {
         edges {
           node {
             articleReplies {
@@ -402,20 +403,24 @@ def check_cofacts_api(text):
     }
     """
     try:
-        res = requests.post(url, json={"query": query, "variables": {"text": text}}, timeout=5)
+        # 這裡改用 clean_text 送出搜尋
+        res = requests.post(url, json={"query": query, "variables": {"text": clean_text}}, timeout=5)
         data = res.json()
         
         edges = data.get("data", {}).get("ListArticles", {}).get("edges", [])
+        
         if edges:
-            # 檢查第一筆最像的資料，看有沒有查核員標記它為 RUMOR (不實訊息)
-            replies = edges[0].get("node", {}).get("articleReplies", [])
-            for r in replies:
-                if r.get("reply", {}).get("type") == "RUMOR":
-                    return {
-                        "risk_level": "Red",
-                        "score": 100,
-                        "reply_text": "🚨 系統判定分數：100 分\n⚠️ 警告：這段文字已被【Cofacts 真的假的】查核平台標記為「不實訊息或詐騙」，請千萬不要上當！"
-                    }
+            # 檢查抓回來的前 10 筆資料
+            for edge in edges:
+                replies = edge.get("node", {}).get("articleReplies", [])
+                for r in replies:
+                    # 只要 10 筆中有 1 筆是 RUMOR，就抓出來！
+                    if r.get("reply", {}).get("type") == "RUMOR":
+                        return {
+                            "risk_level": "Red",
+                            "score": 100,
+                            "reply_text": "🚨 系統判定分數：100 分\n⚠️ 警告：這段文字已被【Cofacts 真的假的】查核平台標記為「不實訊息或詐騙」，請千萬不要上當！"
+                        }
     except Exception as e:
         print(f"❌ Cofacts 連線錯誤: {e}")
         
