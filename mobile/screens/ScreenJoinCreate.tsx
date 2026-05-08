@@ -23,13 +23,25 @@ export default function ScreenJoinCreate({ navigation }: any) {
 
   const { groups, createGroup, joinGroupById } = useGroups();
 
+  // 🚀 修改後的邏輯：創建完畢後引導回首頁
   const handleCreateGroup = async () => {
     if (!groupNameInput.trim()) return Alert.alert("提示", "請輸入群組名稱");
+    
     const newId = await createGroup(groupNameInput);
     setCreatedGroupId(newId); 
+    
     Alert.alert("獲取成功", `群組代碼：${newId}`, [
-      { text: "複製代碼", onPress: () => Clipboard.setString(newId) },
-      { text: "確定" }
+      { 
+        text: "複製代碼並回首頁", 
+        onPress: () => {
+          Clipboard.setString(newId);
+          navigation.navigate("Home"); // 這裡確保創建後會回首頁顯示
+        } 
+      },
+      { 
+        text: "確定", 
+        onPress: () => navigation.navigate("Home") // 按下確定也回首頁
+      }
     ]);
   };
 
@@ -54,8 +66,12 @@ export default function ScreenJoinCreate({ navigation }: any) {
         </View>
 
         <View style={styles.tabWrapper}>
-          <Pressable onPress={() => setIsCreate(true)} style={[styles.tab, isCreate && styles.activeTab]}><Text style={[styles.tabText, isCreate && styles.activeTabText]}>創建</Text></Pressable>
-          <Pressable onPress={() => setIsCreate(false)} style={[styles.tab, !isCreate && styles.activeTab]}><Text style={[styles.tabText, !isCreate && styles.activeTabText]}>加入</Text></Pressable>
+          <Pressable onPress={() => setIsCreate(true)} style={[styles.tab, isCreate && styles.activeTab]}>
+            <Text style={[styles.tabText, isCreate && styles.activeTabText]}>創建</Text>
+          </Pressable>
+          <Pressable onPress={() => setIsCreate(false)} style={[styles.tab, !isCreate && styles.activeTab]}>
+            <Text style={[styles.tabText, !isCreate && styles.activeTabText]}>加入</Text>
+          </Pressable>
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -67,16 +83,22 @@ export default function ScreenJoinCreate({ navigation }: any) {
                 <Text style={styles.label}>群組 ID（創建後固定）</Text>
                 <View style={styles.idRow}>
                   <TextInput value={createdGroupId} editable={false} placeholder="點擊下方按鈕獲取" style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: "#f3f4f6" }]} />
-                  <TouchableOpacity onPress={() => createdGroupId && Clipboard.setString(createdGroupId)} style={styles.copyBtn}><Text style={styles.copyBtnText}>複製</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => createdGroupId && Clipboard.setString(createdGroupId)} style={styles.copyBtn}>
+                    <Text style={styles.copyBtnText}>複製</Text>
+                  </TouchableOpacity>
                 </View>
                 <View style={styles.spacer} />
-                <Pressable onPress={handleCreateGroup} style={styles.primaryBtn}><Text style={styles.primaryText}>獲取群組代碼</Text></Pressable>
+                <Pressable onPress={handleCreateGroup} style={styles.primaryBtn}>
+                  <Text style={styles.primaryText}>獲取群組代碼</Text>
+                </Pressable>
               </View>
             ) : (
               <View>
                 <Text style={styles.label}>輸入群組 ID</Text>
                 <TextInput value={joinId} onChangeText={(t) => setJoinId(t.toUpperCase())} placeholder="貼上代碼..." placeholderTextColor="#9ca3af" style={styles.input} />
-                <Pressable onPress={handleJoinGroup} style={styles.primaryBtn}><Text style={styles.primaryText}>確認加入</Text></Pressable>
+                <Pressable onPress={handleJoinGroup} style={styles.primaryBtn}>
+                  <Text style={styles.primaryText}>確認加入</Text>
+                </Pressable>
               </View>
             )}
           </View>
