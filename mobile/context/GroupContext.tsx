@@ -28,6 +28,7 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     { userId: "user_04", userName: "林雅婷", groupId: "DEMO123" },
   ]);
 
+  // 更新群組並自動寫入 AsyncStorage
   const setGroups = useCallback((update: Group[] | ((prev: Group[]) => Group[])) => {
     _setGroups((prev) => {
       const next = typeof update === "function" ? update(prev) : update;
@@ -36,19 +37,35 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   }, []);
 
+  // 初始化載入
   useEffect(() => {
-    AsyncStorage.getItem(MY_GROUPS_KEY).then(raw => { if (raw) _setGroups(JSON.parse(raw)); });
+    AsyncStorage.getItem(MY_GROUPS_KEY).then(raw => { 
+      if (raw) _setGroups(JSON.parse(raw)); 
+    });
   }, []);
 
+  // 🚀 修正後的創建邏輯：確保 State 同步更新
   const createGroup = async (groupName: string) => {
+    // 產生隨機 ID
     const newId = Math.random().toString(36).substring(2, 9).toUpperCase();
     const newGroup: Group = {
-      id: newId, name: groupName, status: "正常", createdAt: Date.now(), muted: false,
+      id: newId, 
+      name: groupName, 
+      status: "正常", 
+      createdAt: Date.now(), 
+      muted: false,
       members: [{ userId: "admin", userName: "管理員", role: "管理員", status: "正常" }],
     };
+
+    // 1. 存入全域資料庫快取
     const rawGlobal = await AsyncStorage.getItem(GLOBAL_DB_KEY);
     const globalDB = rawGlobal ? JSON.parse(rawGlobal) : [];
     await AsyncStorage.setItem(GLOBAL_DB_KEY, JSON.stringify([newGroup, ...globalDB]));
+
+    // 🌟 關鍵修正：同時更新當前 App 的 groups 狀態
+    // 這樣首頁（ScreenGroupList）才會偵測到變動並顯示新群組
+    setGroups(prev => [newGroup, ...prev]);
+
     return newId; 
   };
 
