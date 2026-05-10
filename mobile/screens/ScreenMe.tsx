@@ -18,7 +18,6 @@ export default function ScreenMe() {
   const [nickname, setNickname] = React.useState("使用者暱稱");
   const [showId, setShowId] = React.useState(true); 
   const [notificationsOff, setNotificationsOff] = React.useState(false); 
-  const [showId2, setShowId2] = React.useState(true); 
 
   const onChangeAvatar = () => {
     Alert.alert("修改頭像", "這裡之後可接相簿/相機選擇（先保留灰色圓圈）");
@@ -83,17 +82,8 @@ export default function ScreenMe() {
         <Text style={styles.hintMuted}>
           {notificationsOff ? "通知已關閉" : "通知已開啟"}
         </Text>
-
-        <View style={styles.divider} />
-
-        {/* 5) 是否顯示 ID */}
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>是否顯示 ID</Text>
-          <OX value={showId2} onChange={setShowId2} />
-        </View>
-        <Text style={styles.hintMuted}>
-          {showId2 ? "將顯示 ID" : "將隱藏 ID"}
-        </Text>
+        
+        {/* 🌟 提示：原本最後一行的「是否顯示 ID」已根據你的要求移除 */}
       </ScrollView>
     </SafeAreaView>
   );
