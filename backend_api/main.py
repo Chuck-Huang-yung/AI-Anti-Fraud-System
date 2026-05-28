@@ -73,6 +73,32 @@ except Exception as e:
 # ---------
 # 真實 AI 分析函式
 # ---------
+def extract_and_clean_urls(text: str) -> list:
+    """
+    終極網址提取器：智慧黏合 OCR 斷行，且不誤食下方無關文字
+    """
+    if not text:
+        return []
+        
+    # 1. 智慧黏合：只把 http:// 或網址特定符號 (/, ., -, =, ?) 後面的換行與空白消掉
+    # 這樣 malware.html 後面的換行就會被保留，不會跟下一行的文字黏在一起
+    text = re.sub(r'(https?://)\s+', r'\1', text)
+    text = re.sub(r'([/.\-?=&#])\s+', r'\1', text)
+    
+    # 2. 嚴格提取：正則範圍【絕對不能】包含 \n 或 \r，只要遇到真正的換行就會自動停止
+    url_pattern = re.compile(r'https?://[a-zA-Z0-9.\-_/?=&%#]+')
+    found_urls = url_pattern.findall(text)
+    
+    cleaned_urls = []
+    for url in found_urls:
+        # 3. 剝除尾端雜質 (包含 OCR 容易誤讀產生的 ...)
+        clean_url = url.rstrip(".,;:!?()[]{}...")
+        if clean_url and len(clean_url) > 8:
+            cleaned_urls.append(clean_url)
+            
+    return cleaned_urls
+
+
 def ai_analyze(text: str):
     # 優化 Prompt：給予明確的標題與結構指示
     prompt = f"""
@@ -179,27 +205,31 @@ def ocr_process(base64_img):
         return ""
 
 def check_url_in_blacklist(text):
-    """檢查文字中的網址是否存在於 10 萬筆政府黑名單資料庫中"""
+    """
+    結合「終極網址提取器」與資料庫精準比對：
+    先在 Python 層把斷行網址接好，再進入資料庫比對，大幅減輕資料庫運算負擔！
+    """
     
-    # 用正則表達式把使用者傳來文字裡的「所有網址」抓出來
-    url_pattern = re.compile(r'https?://[^\s]+|www\.[^\s]+')
-    found_urls = url_pattern.findall(text)
+    # 1. 呼叫我們寫好的清洗大師，把網址精準抓出來
+    found_urls = extract_and_clean_urls(text)
     
     if not found_urls:
-        return None # 沒找到網址就直接放行，讓下一關處理
+        return None 
 
     db = SessionLocal()
     try:
-        # 逐一檢查抓出來的每一個網址
-        for url in found_urls:
-            # 清理網址，確保比對準確 (去掉頭尾空白，或一些奇怪的結尾符號)
-            clean_url = url.strip(".,!?\"'")
+        for clean_url in found_urls:
+            print(f"🔎 [防線4] 正在比對本地黑名單網址: [{clean_url}]")
             
-            # 🚀 在 10 萬筆資料中進行秒殺查詢 (使用 FraudURL)
-            bad_site = db.query(FraudURL).filter(FraudURL.url.contains(clean_url)).first()
+            # 2. 拔除網址前綴 (http://, https://, www.)，只拿核心網址來比對，增加命中率
+            core_url = re.sub(r'^https?://(www\.)?', '', clean_url)
+            
+            # 3. 使用 SQL 的 ILIKE 進行輕量級模糊比對 (速度極快)
+            # 只要資料庫的 URL 欄位包含這個核心網址，就宣告攔截！
+            bad_site = db.query(FraudURL).filter(FraudURL.url.ilike(f"%{core_url}%")).first()
             
             if bad_site:
-                # 只要中了一個惡意網址，直接亮紅燈並回傳詳細資料！
+                print(f"💥【資料庫精準命中】成功攔截惡意資料: [{bad_site.url}]")
                 return {
                     "risk_level": "Red",
                     "score": 100,
@@ -207,29 +237,36 @@ def check_url_in_blacklist(text):
                         f"🚨 系統判定分數：100 分\n"
                         f"⚠️ 嚴重警告：此網址已列入政府黑名單！\n"
                         f"----------------------\n"
-                        f"❌ 惡意網址：{bad_site.url}\n"
-                        f"🏷️ 網站類型：{bad_site.description}\n"
-                        f"🏛️ 通報來源：{bad_site.source}\n"
+                        f"❌ 惡意網址：{bad_site.url.strip()}\n"
+                        f"🏷️ 網站類型：{getattr(bad_site, 'description', '惡意網站')}\n"
+                        f"🏛️ 通報來源：{getattr(bad_site, 'source', '165 反詐騙')}\n"
                         f"----------------------\n"
                         f"請立即停止點擊並封鎖對方！"
                     )
                 }
-            old_bad_site = db.query(FraudLink).filter(FraudLink.url == clean_url).first()
+                
+            # 4. 同步比對早期防詐黑名單 (FraudLink)
+            old_bad_site = db.query(FraudLink).filter(FraudLink.url.ilike(f"%{core_url}%")).first()
             
             if old_bad_site:
+                print(f"💥【資料庫精準命中】舊庫危險網址: [{old_bad_site.url}]")
                 return {
                     "risk_level": "Red",
                     "score": 100,
                     "reply_text": (
                         f"🚨 系統判定分數：100 分\n"
-                        f"⚠️ 嚴重警告：偵測到危險網址「{clean_url}」\n"
+                        f"⚠️ 嚴重警告：偵測到危險網址\n"
                         f"該連結已列在早期防詐黑名單中，絕對不要點擊！"
                     )
                 }
-    finally:
-        db.close() # 記得關閉資料庫連線
 
-    return None # 如果所有網址都很安全，就放行
+    except Exception as e:
+        print(f"❌ 查詢黑名單資料庫失敗: {e}")
+    finally:
+        db.close()
+
+    # 🌟 沒查到一律回傳 None，確保主流程可以順利往下流動
+    return None
 
 class MessageLog(Base):
     __tablename__ = "message_logs"
@@ -317,8 +354,39 @@ FRAUD_KEYWORDS_WEIGHTED = {
     "交友軟體": 20, "網戀": 20, "報警": 20, "傳票": 20, "解約": 20, "扣款": 20
 }
 
-def check_risk_level(text):
+def check_risk_level(text: str) -> dict:
+
     """一般使用者的關鍵字「權重」計分邏輯"""
+    BYPASS_KEYWORDS = {"如何上傳可疑訊息?", "我想通報165!!!", "如何使用家庭群組?", "如何把「真識監詐」拉進群組一起防詐?", "新手導覽", "新手教學", "邀請到群組", "邀請至群組", "家庭群組", "其他假新聞", "其他假新聞資訊", "上傳"}
+    
+    # 移除前後空格後進行精準比對，若命中則直接回傳 0 分
+    if text.strip() in BYPASS_KEYWORDS:
+        return None
+    
+# 🔥 呼叫終極清洗大師
+    clean_urls = extract_and_clean_urls(text)
+    
+    if clean_urls:
+        for clean_url in clean_urls:
+            print(f"🎯【網址通解器】成功修復並提取網址: [{clean_url}]")
+            
+            # 第一次查詢：直接丟給底層資料庫
+            db_result = check_url_in_blacklist(clean_url)
+            
+            # 第二次查詢（補救機制）
+            if db_result is None:
+                domain_match = re.search(r'https?://(?:www\.)?([a-zA-Z0-9\-]+)', clean_url)
+                if domain_match:
+                    core_keyword = domain_match.group(1)
+                    if len(core_keyword) > 4:
+                        print(f"🔄 補救機制啟動：使用網址核心特徵 [{core_keyword}] 進行資料庫再查詢...")
+                        db_result = check_url_in_blacklist(core_keyword)
+            
+            # 🌟【絕殺關鍵點】只要底層資料庫有命中紅燈大禮包，立刻 return！
+            if db_result is not None:
+                print(f"🛑【大腦攔截成功】網址命中黑名單，直接回傳紅燈 100 分！")
+                return db_result
+            
     detected_keywords = []
     score = 0
     
@@ -397,16 +465,17 @@ def get_official_reminder(text):
 # --- 外部 API 1: Google Safe Browsing ---
 def check_google_safe_browsing(text):
     """抓取文字中的網址，丟給 Google 檢查是否為惡意網站"""
-    # 用正則表達式把網址找出來
-    url_pattern = re.compile(r'https?://[^\s]+|www\.[^\s]+')
-    found_urls = url_pattern.findall(text)
+    
+    # 🔥 直接呼叫我們寫好的終極清洗大師
+    found_urls = extract_and_clean_urls(text)
     
     if not found_urls:
         return None # 沒網址就不檢查
         
+    print(f"🌍 [Google防線] 準備送往 Google 檢查的修復網址: {found_urls}")
+    
     api_url = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={GOOGLE_SAFE_BROWSING_KEY}"
     
-    # 按照 Google 規定的格式打包網址
     payload = {
         "client": {"clientId": "my-anti-fraud-bot", "clientVersion": "1.0"},
         "threatInfo": {
@@ -421,9 +490,9 @@ def check_google_safe_browsing(text):
         res = requests.post(api_url, json=payload, timeout=5)
         data = res.json()
         
-        # 🚨 如果回傳的 JSON 裡面有 matches，代表是認證的惡意網站！
         if "matches" in data:
             bad_url = data["matches"][0]["threat"]["url"]
+            print(f"🛑 [Google防線] 成功攔截惡意網址: {bad_url}")
             return {
                 "risk_level": "Red",
                 "score": 100,
@@ -433,6 +502,7 @@ def check_google_safe_browsing(text):
         print(f"❌ Google API 連線錯誤: {e}")
         
     return None
+
 
 def check_cofacts_api(text):
     """比對 Cofacts 查核資料庫 (放寬搜尋範圍版)"""

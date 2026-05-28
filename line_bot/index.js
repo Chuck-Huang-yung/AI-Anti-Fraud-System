@@ -34,11 +34,11 @@ function saveState(state) {
 }
 
 function isCommandToStart(text) {
-  return /幫我抓取訊息|開始監控|開始讀取/.test(text);
+  return /幫我抓取訊息|開始偵測|開始讀取/.test(text);
 }
 
 function isCommandToStop(text) {
-  return /取消讀取|停止監控|停止讀取/.test(text);
+  return /取消讀取|停止偵測|停止讀取/.test(text);
 }
 
 // 3) 測試路由
@@ -96,6 +96,29 @@ async function handleEvent(event) {
   let payloadContent = ""; // 準備送給 Python 的內容 (文字 或 Base64)
   let logText = ""; // 準備存進 messages.jsonl 的紀錄文字
 
+  if (msgType === "text") {
+    const trimmedText = event.message.text.trim();
+    if (
+      trimmedText === "如何上傳可疑訊息?" ||
+      trimmedText === "如何使用家庭群組?" ||
+      trimmedText === "如何把「真識監詐」拉進群組一起防詐?" ||
+      trimmedText === "上傳" ||
+      trimmedText === "我想通報165!!!" ||
+      trimmedText === "新手導覽" ||
+      trimmedText === "新手教學" ||
+      trimmedText === "家庭群組" ||
+      trimmedText === "邀請到群組" ||
+      trimmedText === "邀請至群組" ||
+      trimmedText === "其他假新聞" ||
+      trimmedText === "其他假新聞資訊"
+    ) {
+      console.log(
+        `🤫 命中特定文字 [${trimmedText}]，系統不進行任何回覆與後續分析。`,
+      );
+      return Promise.resolve(null);
+    }
+  }
+
   try {
     // 💡 判斷是文字還是圖片
     if (msgType === "text") {
@@ -152,21 +175,22 @@ async function handleEvent(event) {
         JSON.stringify(data) + "\n",
         "utf-8",
       );
-      return Promise.resolve(null);
+    } else {
+      // 一對一聊天：直接寫入檔案存檔
+      const data = {
+        sourceType,
+        userId: safeUserId,
+        text: logText,
+        timestamp: event.timestamp,
+      };
+      fs.appendFileSync(
+        path.join(__dirname, "messages.jsonl"),
+        JSON.stringify(data) + "\n",
+        "utf-8",
+      );
     }
 
     // ===== 一對一聊天：寫入 + 呼叫 FastAPI 分析 + 回覆 =====
-    const data = {
-      sourceType,
-      userId: safeUserId,
-      text: logText,
-      timestamp: event.timestamp,
-    };
-    fs.appendFileSync(
-      path.join(__dirname, "messages.jsonl"),
-      JSON.stringify(data) + "\n",
-      "utf-8",
-    );
 
     // 將資料送給 Python 大腦
     const responseData = await callAnalyzeAPI({
@@ -175,25 +199,33 @@ async function handleEvent(event) {
       text: payloadContent,
     });
 
+    if (!responseData || responseData.risk_level === null) {
+      return Promise.resolve(null);
+    }
+
     const riskLevel = responseData.risk_level;
     const replyText = responseData.reply_text;
 
     let emoji = "🟢";
+    let riskZh = "(安全)";
     if (riskLevel === "Yellow") {
       emoji = "🟡";
+      riskZh = "(注意!)";
     } else if (riskLevel === "Red") {
       emoji = "🔴";
+      riskZh = "(危險!!!)";
     }
 
     return client.replyMessage(event.replyToken, {
       type: "text",
-      text: `【坤坤防詐分析】\n${emoji} 風險等級：${riskLevel}\n\n${replyText}`,
+      text: `【「真識監詐」防詐分析】\n${emoji} 風險等級：${riskLevel} ${riskZh}\n\n${replyText}`,
     });
   } catch (err) {
     console.error(
       "處理訊息或呼叫 API 失敗:",
       err?.response?.data || err.message,
     );
+
     return client.replyMessage(event.replyToken, {
       type: "text",
       text: "分析服務未啟動或連線異常，已先幫您保存訊息。",
