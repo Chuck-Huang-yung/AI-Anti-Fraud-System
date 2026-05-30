@@ -1,0 +1,5 @@
+-- 這是測試用的假資料庫備份檔
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50)
+);
