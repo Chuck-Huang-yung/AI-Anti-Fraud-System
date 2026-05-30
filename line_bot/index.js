@@ -41,6 +41,85 @@ function isCommandToStop(text) {
   return /取消讀取|停止偵測|停止讀取/.test(text);
 }
 
+// ==========================================
+// 🌟 前端與資料庫專區
+// ==========================================
+const cors = require("cors");
+app.use(cors()); // 允許前端連線
+
+const { Pool } = require("pg");
+const pool = new Pool({
+  user: "postgres",
+  host: "localhost",
+  database: "fraud_db",
+  password: "0509", // 👈 記得改！
+  port: 5432,
+});
+
+// 你寫好的建立群組 API (加上 express.json() 解析)
+// ==========================================
+// 🌟 真正寫入 family_groups 的 API
+// ==========================================
+app.post("/api/groups", express.json(), async (req, res) => {
+  console.log("收到前端建立群組請求：", req.body);
+
+  const client = await pool.connect();
+
+  try {
+    const { groupName, userId, userName } = req.body;
+    if (!groupName || !userId) {
+      return res.status(400).json({ error: "缺少必要參數" });
+    }
+
+    // 1. 產生 GRP- 亂數 ID
+    const groupId =
+      "GRP-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    // 2. 準備你要塞進 members (jsonb) 的初始建立者資料
+    const initialMembers = [
+      {
+        userId: userId,
+        userName: userName || "Unknown User",
+        role: "管理員",
+        status: "正常",
+      },
+    ];
+
+    // 3. 寫入你設計的 family_groups 表格
+    const insertQuery = `
+      INSERT INTO family_groups (group_id, group_name, status, members, muted, created_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      RETURNING *;
+    `;
+
+    // 注意：把 initialMembers 轉成字串 (JSON.stringify) 才能存入 jsonb 欄位
+    const values = [
+      groupId,
+      groupName,
+      "正常",
+      JSON.stringify(initialMembers),
+      false,
+    ];
+
+    const result = await client.query(insertQuery, values);
+    console.log("✅ 成功寫入 family_groups:", result.rows[0]);
+
+    // 4. 回傳給前端
+    res.status(201).json({
+      success: true,
+      groupId: groupId,
+      data: result.rows[0], // 這裡回傳的會是包含 group_id, group_name 等完美欄位的資料
+    });
+  } catch (err) {
+    console.error("❌ 建立群組錯誤:", err);
+    res.status(500).json({ error: "伺服器錯誤" });
+  } finally {
+    client.release();
+  }
+});
+// ==========================================
+// ==========================================
+
 // 3) 測試路由
 app.get("/", (req, res) => {
   res.send("LINE 防詐機器人後端 Server 運作中...");
@@ -234,7 +313,8 @@ async function handleEvent(event) {
 }
 
 // 6) 錯誤處理
-app.use((err, req, res) => {
+app.use((err, req, res, next) => {
+  // 🌟 這裡一定要放 4 個參數！
   console.error("❌ middleware error:", err);
   res.status(500).send(err.message);
 });
