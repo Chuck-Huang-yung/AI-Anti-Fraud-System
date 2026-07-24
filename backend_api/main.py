@@ -2,10 +2,12 @@ import os
 import base64
 import re
 import requests
+import io
 import google.generativeai as genai
 from dotenv import load_dotenv
 from google.cloud import vision
 from google.oauth2 import service_account
+from faster_whisper import WhisperModel
 
 # 啟動環境變數載入器 (這行非常重要，它會去讀取 backend_api 裡面的 .env)
 load_dotenv()
@@ -30,6 +32,9 @@ SQLALCHEMY_DATABASE_URL = "postgresql://postgres:0509@localhost/fraud_db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+print("⏳ 正在載入極速語音辨識模型 faster-whisper (base)...")
+whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
+print("✅ 語音辨識模型載入完成！")
 # ---------
 # AI 設定
 # ---------
@@ -204,6 +209,34 @@ def ocr_process(base64_img):
         print(f"❌ OCR 錯誤: {e}")
         return ""
 
+def audio_process(base64_audio):
+    """將 Base64 音檔直接在記憶體解碼，並使用 faster-whisper 極速轉字"""
+    try:
+        # 1. 解碼 Node.js 傳來的 base64 音訊為二進制資料
+        audio_bytes = base64.b64decode(base64_audio)
+        
+        # 🌟 2. 記憶體串流：直接把二進制包裝成虛擬檔案，完全不讀寫硬碟！
+        audio_stream = io.BytesIO(audio_bytes)
+            
+        print("🎙️ 正在極速聽取並辨識語音內容...")
+        
+        # 🌟 3. 終極加速參數：
+        # - beam_size=1: 關閉多路徑探索，運算速度最快
+        # - vad_filter=True: 自動砍掉長輩錄音前後的空白靜音，只算真正有講話的時間！
+        segments, info = whisper_model.transcribe(
+            audio_stream, 
+            language="zh", 
+            beam_size=1, 
+            vad_filter=True
+        )
+        
+        transcribed_text = "".join([segment.text for segment in segments]).strip()
+        return transcribed_text
+                
+    except Exception as e:
+        print(f"❌ 語音辨識 (STT) 發生錯誤: {e}")
+        return ""
+    
 def check_url_in_blacklist(text):
     """
     結合「終極網址提取器」與資料庫精準比對：
@@ -364,10 +397,11 @@ FRAUD_KEYWORDS_WEIGHTED = {
 def check_risk_level(text: str) -> dict:
 
     """一般使用者的關鍵字「權重」計分邏輯"""
-    BYPASS_KEYWORDS = {"如何上傳可疑訊息?", "我想通報165!!!", "如何使用家庭群組?", "如何把「真識監詐」拉進群組一起防詐?", "新手導覽", "新手教學", "邀請到群組", "邀請至群組", "家庭群組", "其他假新聞", "其他假新聞資訊", "上傳", "紅色警戒"}
+    BYPASS_KEYWORDS = {"如何上傳可疑訊息","如何上傳可疑訊息?", "我想通報165", "我想通報165!!!", "如何使用家庭群組", "如何使用家庭群組?", "如何把真識監詐拉進群組一起防詐", "如何把「真識監詐」拉進群組一起防詐?", "新手導覽", "新手教學", "邀請到群組", "邀請至群組", "家庭群組", "其他假新聞", "其他假新聞資訊", "上傳", "紅色警戒"}
     
-    # 移除前後空格後進行精準比對，若命中則直接回傳 0 分
-    if text.strip() in BYPASS_KEYWORDS:
+    # 💡 只要命中關鍵字，直接回傳 None 不予評分，交給外層或 LINE 後台去處理
+    clean_text_check = re.sub(r'[^\w\s]', '', text).strip()
+    if any(kw in clean_text_check for kw in BYPASS_KEYWORDS):
         return None
     
 # 🔥 呼叫終極清洗大師
@@ -562,7 +596,6 @@ def check_cofacts_api(text):
     return None
 
 # --- API 路由分流 ---
-# ⚠️ 注意：這裡把 response_model=AnalyzeResponse 拿掉了，讓回傳格式更自由
 @app.post("/analyze/text") 
 def analyze(req: AnalyzeRequest = Body(...)):
     user_id = req.user_id
@@ -575,18 +608,49 @@ def analyze(req: AnalyzeRequest = Body(...)):
 
     # 軌道 B：一般使用者
     final_text = req.content
+    audio_prefix = "" # 💡 貼心小標記，如果是語音，我們把辨識結果附在回覆開頭給長輩看
 
-    # 防線 1：如果是圖片，先啟動 OCR 轉文字
+    # 防線 1-A：如果是圖片，先啟動 OCR 轉文字
     if msg_type == "image":
         print(f"🖼️ 收到使用者 {user_id} 圖片，啟動 OCR...")
         final_text = ocr_process(req.content)
         if not final_text:
             return {"risk_level": "Green", "reply_text": "圖片中未辨識到清晰的文字。"}
 
-    print(f"👤 開始分析文字：{final_text[:20]}...")
+    # 🌟 防線 1-B：【新增這裡】如果是錄音檔，啟動 faster-whisper 語音轉文字！
+    elif msg_type == "audio":
+        print(f"🎙️ 收到使用者 {user_id} 語音訊息，啟動 faster-whisper...")
+        final_text = audio_process(req.content)
+        if not final_text:
+            return {"risk_level": "Green", "reply_text": "語音中未辨識到清晰的語意內容，請盡量靠近麥克風說話。"}
+        
+        # 幫語音辨識結果做個引言，老人家看 LINE 才會清楚知道系統聽懂了什麼
+        print(f"🎙️ [語音辨識結果]: {final_text}")
+        audio_prefix = f"🎙️【系統已辨識您的語音內容】：\n「{final_text}」\n\n"
 
+        BYPASS_KEYWORDS = {"如何上傳可疑訊息", "我想通報165", "如何使用家庭群組", "如何把真識監詐拉進群組一起防詐", "新手導覽", "新手教學", "邀請到群組", "邀請至群組", "家庭群組", "其他假新聞", "其他假新聞資訊", "上傳", "紅色警戒"}
+        clean_audio_text = re.sub(r'[^\w\s]', '', final_text).strip()
+        # 模糊比對：避免 Whisper 加上標點符號導致比對失敗
+        if any(re.sub(r'[^\w\s]', '', kw) in clean_audio_text for kw in BYPASS_KEYWORDS):
+            print("🎯 命中語音操作指令，提示改用鍵盤打字！")
+            return {
+                "risk_level": "Command",
+                "reply_text": (
+                    f"{audio_prefix}"
+                    "💡【語音指令提示】\n"
+                    "⚠️不好意思😔，您剛才說的是系統操作指令，如果您想使用特定「指令」，請試著改用「用鍵盤打字」輸入喔！\n\n"
+                    "👇 常用指令：\n"
+                    "➡️ 新手教學\n"
+                    "➡️ 如何上傳可疑訊息?\n"
+                    "➡️ 如何使用家庭群組?\n"
+                    "➡️ 如何把「真識監詐」拉進群組一起防詐?\n"
+                    "➡️ 我想通報165!!!\n"
+                    "➡️ 其他假新聞資訊"
+                )
+            }
+    print(f"👤 開始分析文字：{final_text[:20]}...")
     # ==========================================
-    # 🛡️ 核心防詐判斷邏輯 (瀑布式篩選)
+    # 🛡️ 核心防詐判斷邏輯 (瀑布式篩選 - 完全維持原本寫法)
     # ==========================================
     risk_result = None
 
@@ -597,26 +661,35 @@ def analyze(req: AnalyzeRequest = Body(...)):
     if not risk_result:
         risk_result = check_cofacts_api(final_text)
 
-    # 防線 4：比對政府網址黑名單 (你原本的本地資料庫)
+    # 防線 4：比對政府網址黑名單 (本地資料庫)
     if not risk_result:
         risk_result = check_url_in_blacklist(final_text)
     
-    # 防線 5：如果前面的最高風險都沒中，啟動百大關鍵字權重 (你原本的邏輯)
+    # 防線 5：百大關鍵字權重
     if not risk_result:
         risk_result = check_risk_level(final_text)
 
     # ==========================================
 
-    # 存檔 (完美銜接你原本寫好的邏輯，完全不用動)
+    # 存檔與溫馨小提醒 (完全不用動)
     official_reminder_text = get_official_reminder(final_text)
-    risk_result["reply_text"] += official_reminder_text
-
-    save_to_db(user_id, final_text, risk_result["risk_level"], risk_result["score"])
-
-    return {
-        "risk_level": risk_result["risk_level"],
-        "reply_text": risk_result["reply_text"]
-    }
+    
+    # 🌟 2. 終極防呆：明確檢查 risk_result 是否存在，絕對不讓 NoneType 報錯！
+    if risk_result is not None:
+        risk_result["reply_text"] = audio_prefix + risk_result["reply_text"] + official_reminder_text
+        save_to_db(user_id, final_text, risk_result["risk_level"], risk_result["score"])
+        return {
+            "risk_level": risk_result["risk_level"],
+            "reply_text": risk_result["reply_text"]
+        }
+    else:
+        # 當前面的防線全數回傳 None 時的保底綠燈處理
+        fallback_text = f"{audio_prefix}目前未偵測到明顯詐騙關鍵字，但仍請保持警覺。{official_reminder_text}"
+        save_to_db(user_id, final_text, "Green", 0)
+        return {
+            "risk_level": "Green",
+            "reply_text": fallback_text
+        }
 # .\.venv\Scripts\Activate 啟動虛擬環境
 # python -m uvicorn main:app --reload 啟動 FastAPI 中樞服務
 
