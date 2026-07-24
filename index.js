@@ -4,9 +4,28 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const line = require("@line/bot-sdk");
+const cors = require("cors"); // 👈 新增
+const { Pool } = require("pg");
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// 啟用 CORS，允許前端呼叫 API
+app.use(cors());
+
+// --- PostgreSQL 連線池設定 ---
+const pool = new Pool({
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_DATABASE,
+  password: process.env.DB_PASSWORD,
+  port: process.env.DB_PORT,
+});
+
+pool
+  .connect()
+  .then(() => console.log("✅ 成功連線到 PostgreSQL 資料庫！"))
+  .catch((err) => console.error("❌ PostgreSQL 連線失敗", err));
 
 //// 1) LINE 設定
 const config = {
@@ -37,6 +56,63 @@ function isCommandToStart(text) {
 function isCommandToStop(text) {
   return /取消讀取|停止監控|停止讀取/.test(text);
 }
+
+app.post("/api/groups", express.json(), async (req, res) => {
+  try {
+    const { groupName, userId, userName } = req.body;
+
+    // 產生跟前端一樣的 7 碼隨機大寫 ID
+    const groupId = Math.random().toString(36).substring(2, 9).toUpperCase();
+
+    // 預設建立者就是「管理員」
+    const initialMember = [
+      {
+        userId: userId || "admin",
+        userName: userName || "管理員",
+        role: "管理員",
+        status: "正常",
+      },
+    ];
+
+    const query = `
+      INSERT INTO family_groups (group_id, group_name, members, status, muted)
+      VALUES ($1, $2, $3::jsonb, '正常', false)
+      RETURNING *;
+    `;
+    const values = [groupId, groupName, JSON.stringify(initialMember)];
+
+    const result = await pool.query(query, values);
+
+    res.json({ success: true, groupId: groupId, data: result.rows[0] });
+  } catch (error) {
+    console.error("建立群組失敗:", error);
+    res.status(500).json({ success: false, message: "伺服器錯誤" });
+  }
+});
+
+// 2. 【查詢群組】API
+// 【查詢特定使用者的群組】API (前端 LIFF 登入後會呼叫這支)
+app.get("/api/groups/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // 透過 PostgreSQL 強大的 JSONB 查詢：
+    // 尋找 members 陣列中，包含 {"userId": "傳進來的真實ID"} 的群組
+    const query = `
+      SELECT * FROM family_groups
+      WHERE members @> $1::jsonb
+      ORDER BY created_at DESC;
+    `;
+    // 注意：這裡的查詢條件必須跟存入的格式吻合
+    const values = [JSON.stringify([{ userId: userId }])];
+
+    const result = await pool.query(query, values);
+    res.json({ success: true, groups: result.rows });
+  } catch (error) {
+    console.error("查詢使用者群組失敗:", error);
+    res.status(500).json({ success: false, message: "伺服器錯誤" });
+  }
+});
 
 // 3) 測試路由：確認伺服器有活著
 app.get("/", (req, res) => {

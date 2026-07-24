@@ -1,106 +1,286 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useState, useContext, useEffect } from "react";
+import liff from "@line/liff";
+import { View, Text, Image, ActivityIndicator, Platform } from "react-native";
+// 1. 定義資料格式
+export interface Member {
+  userId: string;
+  userName: string;
+  role: "管理員" | "成員";
+  status: "正常" | "可疑";
+  isMuted?: boolean;
+  isPinned?: boolean;
+}
+export interface Group {
+  id: string;
+  name: string;
+  status: "正常" | "可疑";
+  createdAt: number;
+  members: Member[];
+  isPinned?: boolean;
+  isMuted?: boolean;
+  membersCount?: number;
+  pendingMembers?: any[];
+  pendingCount?: number;
+  statusDisplay?: string;
+  muted: boolean;
+}
+export interface PendingMember {
+  userId: string;
+  userName: string;
+  groupId: string;
+}
 
-interface Member { userId: string; userName: string; role: "管理員" | "成員"; status: "正常" | "可疑"; }
-interface Group { id: string; name: string; status: "正常" | "可疑"; createdAt: number; members: Member[]; muted: boolean; }
-interface PendingMember { userId: string; userName: string; groupId: string; }
-
+// 2. 介面定義
 interface GroupContextType {
-  groups: Group[]; 
-  setGroups: (update: Group[] | ((prev: Group[]) => Group[])) => void;
-  createGroup: (groupName: string) => Promise<string>; 
+  groups: Group[];
+  setGroups: React.Dispatch<React.SetStateAction<Group[]>>;
+  createGroup: (groupName: string) => Promise<string>;
   joinGroupById: (id: string) => Promise<boolean>;
   pendingRequests: PendingMember[];
-  handleReview: (userId: string, groupId: string, isApprove: boolean) => Promise<void>;
+  handleReview: (
+    userId: string,
+    groupId: string,
+    isApprove: boolean,
+  ) => Promise<void>;
   getGroupMembers: (groupId: string) => Member[];
+  currentUser: { userId: string; userName: string } | null;
 }
 
 const GroupContext = createContext<GroupContextType | undefined>(undefined);
-const MY_GROUPS_KEY = "fc_my_groups_v5"; 
-const GLOBAL_DB_KEY = "fc_global_db_v5"; 
 
-export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [groups, _setGroups] = useState<Group[]>([]);
-  const [pendingRequests, setPendingRequests] = useState<PendingMember[]>([
-    { userId: "user_01", userName: "王小明", groupId: "DEMO123" },
-    { userId: "user_02", userName: "李美玲", groupId: "DEMO123" },
-    { userId: "user_03", userName: "陳大華", groupId: "DEMO123" },
-    { userId: "user_04", userName: "林雅婷", groupId: "DEMO123" },
-  ]);
+// 🔴🔴🔴 這裡請務必換成你目前啟動的 ngrok 網址 🔴🔴🔴
+const API_BASE_URL = "https://ae3a-220-130-167-166.ngrok-free.app";
 
-  // 更新群組並自動寫入 AsyncStorage
-  const setGroups = useCallback((update: Group[] | ((prev: Group[]) => Group[])) => {
-    _setGroups((prev) => {
-      const next = typeof update === "function" ? update(prev) : update;
-      AsyncStorage.setItem(MY_GROUPS_KEY, JSON.stringify(next));
-      return [...next];
-    });
-  }, []);
+export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<PendingMember[]>([]);
+  const [currentUser, setCurrentUser] = useState<{
+    userId: string;
+    userName: string;
+  } | null>(null);
 
-  // 初始化載入
+  // 3. 畫面載入時：初始化 LIFF 並且跟後端要資料
   useEffect(() => {
-    AsyncStorage.getItem(MY_GROUPS_KEY).then(raw => { 
-      if (raw) _setGroups(JSON.parse(raw)); 
-    });
+    const initLiffAndFetchData = async () => {
+      try {
+        const liffCore = (liff as any).default || liff;
+
+        await liffCore.init({ liffId: "2009712421-QF2zlOtI" });
+
+        if (liffCore.isLoggedIn()) {
+          const profile = await liffCore.getProfile();
+          setCurrentUser({
+            userId: profile.userId,
+            userName: profile.displayName,
+          });
+
+          fetchUserGroups(profile.userId);
+        } else {
+          liffCore.login();
+        }
+      } catch (error) {
+        console.error("❌ LIFF 初始化失敗", error);
+      }
+    };
+    initLiffAndFetchData();
   }, []);
 
-  // 🚀 修正後的創建邏輯：確保 State 同步更新
-  const createGroup = async (groupName: string) => {
-    // 產生隨機 ID
-    const newId = Math.random().toString(36).substring(2, 9).toUpperCase();
-    const newGroup: Group = {
-      id: newId, 
-      name: groupName, 
-      status: "正常", 
-      createdAt: Date.now(), 
-      muted: false,
-      members: [{ userId: "admin", userName: "管理員", role: "管理員", status: "正常" }],
-    };
+  const fetchUserGroups = async (userId: string) => {
+    try {
+      // 🌟 關鍵修復 1：加上 /user/ 才是正確的後端路由！[cite: 3, 4]
+      // 🌟 關鍵修復 2：加上 headers 繞過 ngrok 的 HTML 警告頁面！[cite: 4]
+      const response = await fetch(
+        `${API_BASE_URL}/api/groups/user/${userId}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+            "Bypass-Tunnel-Reminder": "true",
+          },
+        },
+      );
 
-    // 1. 存入全域資料庫快取
-    const rawGlobal = await AsyncStorage.getItem(GLOBAL_DB_KEY);
-    const globalDB = rawGlobal ? JSON.parse(rawGlobal) : [];
-    await AsyncStorage.setItem(GLOBAL_DB_KEY, JSON.stringify([newGroup, ...globalDB]));
-
-    // 🌟 關鍵修正：同時更新當前 App 的 groups 狀態
-    // 這樣首頁（ScreenGroupList）才會偵測到變動並顯示新群組
-    setGroups(prev => [newGroup, ...prev]);
-
-    return newId; 
+      const data = await response.json();
+      if (data.success) {
+        // 🌟 直接接收後端為我們整理好的完整資訊（包含待審核人數與狀態）
+        const formattedGroups = data.groups.map((g: any) => ({
+          id: g.id || g.group_id,
+          name: g.name || g.group_name,
+          status: g.status,
+          createdAt: new Date(
+            g.created_at || g.createdAt || Date.now(),
+          ).getTime(),
+          members: g.members || [],
+          muted: g.muted || false,
+          isMuted: g.isMuted || g.muted || false,
+          isPinned: g.isPinned || false,
+          membersCount: g.membersCount || (g.members ? g.members.length : 1),
+          pendingMembers: g.pendingMembers || [],
+          pendingCount: g.pendingCount || 0,
+        }));
+        setGroups(formattedGroups);
+      }
+    } catch (error) {
+      console.error("❌ 獲取群組失敗", error);
+    }
   };
 
-  const joinGroupById = async (id: string) => {
-    const rawGlobal = await AsyncStorage.getItem(GLOBAL_DB_KEY);
-    const globalDB: Group[] = rawGlobal ? JSON.parse(rawGlobal) : [];
-    const found = globalDB.find(g => g.id === id);
-    if (found) {
-      if (!groups.some(g => g.id === id)) setGroups(prev => [found, ...prev]);
-      return true;
+  // 4. 建立群組：打 API 寫入 PostgreSQL
+  const createGroup = async (groupName: string) => {
+    console.log("🟢 [前端觸發] 準備建立群組，名稱:", groupName);
+    console.log("🟢 [前端狀態] 目前的 currentUser 是:", currentUser);
+
+    if (!currentUser) {
+      console.log(
+        "🔴 [前端阻擋] 建立失敗：找不到 currentUser，可能是 LINE 尚未登入成功！",
+      );
+      alert("尚未取得 LINE 身分，請重新載入！"); // 在手機畫面上跳出警告
+      return "";
     }
+
+    try {
+      console.log(`🟡 [前端發送] 準備呼叫 API: ${API_BASE_URL}/api/groups`);
+
+      const response = await fetch(`${API_BASE_URL}/api/groups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupName: groupName,
+          userId: currentUser.userId,
+          userName: currentUser.userName,
+        }),
+      });
+
+      console.log("🟡 [後端回應] HTTP 狀態碼:", response.status);
+
+      const data = await response.json();
+      console.log("🟢 [後端回應] 解析後的資料:", data);
+
+      if (data.success) {
+        const newDbGroup = data.data;
+
+        // 直接無縫接軌你資料庫回傳的真實欄位！
+        const newGroup: Group = {
+          id: newDbGroup.group_id, // 對應資料庫的 group_id
+          name: newDbGroup.group_name, // 對應資料庫的 group_name
+          status: newDbGroup.status, // 對應資料庫的 status
+          createdAt: new Date(newDbGroup.created_at).getTime(),
+          members: newDbGroup.members, // 直接整包接收 jsonb 陣列
+          muted: newDbGroup.muted, // 接收 boolean
+        };
+
+        setGroups((prev) => [newGroup, ...prev]);
+        return data.groupId;
+      }
+      return "";
+    } catch (error) {
+      console.error(
+        "🔴 [前端錯誤] 呼叫 API 發生嚴重錯誤（可能是網址錯或網路斷線）:",
+        error,
+      );
+      return "";
+    }
+  };
+
+  // 5. 保留前端原本的其他函式
+  const joinGroupById = async (id: string) => {
     return false;
   };
+  const handleReview = async (
+    userId: string,
+    groupId: string,
+    isApprove: boolean,
+  ) => {};
 
-  const handleReview = async (userId: string, groupId: string, isApprove: boolean) => {
-    if (isApprove && groups.length > 0) {
-      const applicant = pendingRequests.find(r => r.userId === userId);
-      if (applicant) {
-        setGroups(prev => prev.map(g => {
-          const isTarget = g.id === groupId || g.id === prev[0]?.id;
-          if (isTarget) {
-            return { ...g, members: [...g.members, { userId: applicant.userId, userName: applicant.userName, role: "成員", status: "正常" }] };
-          }
-          return g;
-        }));
-      }
-    }
-    setPendingRequests(prev => prev.filter(r => r.userId !== userId));
-  };
-
-  const getGroupMembers = (groupId: string) => groups.find(g => g.id === groupId)?.members || [];
+  // 💡 修復點 2：明確定義 find 裡面的 g 的型別為 Group
+  const getGroupMembers = (groupId: string) =>
+    groups.find((g: Group) => g.id === groupId)?.members || [];
 
   return (
-    <GroupContext.Provider value={{ groups, setGroups, createGroup, joinGroupById, pendingRequests, handleReview, getGroupMembers }}>
-      {children}
+    <GroupContext.Provider
+      value={{
+        groups,
+        setGroups,
+        createGroup,
+        joinGroupById,
+        pendingRequests,
+        handleReview,
+        getGroupMembers,
+        currentUser,
+      }}
+    >
+      {/* 🌟 1. 這裡維持你原本的判斷：有登入顯示主應用，沒登入顯示跳舞小雞 Loading */}
+      {currentUser ? (
+        children
+      ) : (
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "#FFFDF9",
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 20,
+            width: "100%",
+            minHeight: "100vh" as any,
+          }}
+        >
+          <Image
+            source={
+              Platform.OS === "web"
+                ? { uri: "/loading.gif" }
+                : require("../assets/loading.gif")
+            }
+            style={{
+              width: 160,
+              height: 90,
+              resizeMode: "contain",
+              marginBottom: 16,
+            }}
+          />
+          <Text
+            style={{
+              fontSize: 17,
+              fontWeight: "800",
+              color: "#4A2E18",
+              textAlign: "center",
+            }}
+          >
+            🐣 小雞偵探正在確認您的 LINE 身分...
+          </Text>
+          <Text
+            style={{
+              marginTop: 6,
+              fontSize: 13,
+              fontWeight: "600",
+              color: "#8B5A2B",
+              textAlign: "center",
+            }}
+          >
+            (正在安全連線至真識監詐系統)
+          </Text>
+        </View>
+      )}
+
+      {/* 🌟 2. 【核心修改】全域常駐隱形小雞：不管老用戶跳轉到哪裡，GIF 永遠鎖在記憶體，任何頁面要用都是 0 秒秒出！ */}
+      <Image
+        source={
+          Platform.OS === "web"
+            ? { uri: "/loading.gif" }
+            : require("../assets/loading.gif")
+        }
+        style={{
+          width: 1,
+          height: 1,
+          opacity: 0,
+          position: "absolute",
+          bottom: 0,
+          left: -9999, // 💡 直接把它推到螢幕左側 9999 像素外的太空！
+          top: -9999,
+        }}
+      />
     </GroupContext.Provider>
   );
 };

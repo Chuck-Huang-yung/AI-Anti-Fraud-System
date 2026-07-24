@@ -10,7 +10,7 @@ const Stack = createNativeStackNavigator();
 
 export default function HomeStack() {
   return (
-    <Stack.Navigator 
+    <Stack.Navigator
       // 🌟 重點：加上這一行，關閉 HomeStack 內部所有頁面的預設 Header
       screenOptions={{ headerShown: false }}
     >
