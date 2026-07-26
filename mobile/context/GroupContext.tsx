@@ -49,7 +49,7 @@ interface GroupContextType {
 const GroupContext = createContext<GroupContextType | undefined>(undefined);
 
 // 🔴🔴🔴 這裡請務必換成你目前啟動的 ngrok 網址 🔴🔴🔴
-const API_BASE_URL = "https://ae3a-220-130-167-166.ngrok-free.app";
+const API_BASE_URL = "https://5edb-220-130-167-166.ngrok-free.app";
 
 export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
   children,

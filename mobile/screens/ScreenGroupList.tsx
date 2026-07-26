@@ -19,7 +19,7 @@ import { useGroups } from "../context/GroupContext";
 import { useFocusEffect } from "@react-navigation/native";
 
 // 💡 請確認這裡是你當下活著的 ngrok 網址
-const API_URL = "https://ae3a-220-130-167-166.ngrok-free.app";
+const API_URL = "https://5edb-220-130-167-166.ngrok-free.app";
 
 const axiosConfig = {
   headers: {

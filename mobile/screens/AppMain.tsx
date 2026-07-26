@@ -20,7 +20,7 @@ import axios from "axios";
 import { useGroups } from "../context/GroupContext"; // 💡 1. 引入共用群組狀態
 
 // 這裡填入你的後端網址 (使用 Localtunnel 或 ngrok 時記得換成最新網址)
-const API_URL = "https://ae3a-220-130-167-166.ngrok-free.app";
+const API_URL = "https://5edb-220-130-167-166.ngrok-free.app";
 // 🌟 1. 新增：穿透 ngrok / localtunnel 攔截的專屬標頭！
 const axiosConfig = {
   headers: {
