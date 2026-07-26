@@ -146,7 +146,11 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
 
       const response = await fetch(`${API_BASE_URL}/api/groups`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+          "Bypass-Tunnel-Reminder": "true",
+        },
         body: JSON.stringify({
           groupName: groupName,
           userId: currentUser.userId,
