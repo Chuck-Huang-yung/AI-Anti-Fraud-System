@@ -1,31 +1,36 @@
 {
   "expo": {
     "name": "詐騙掰家庭群組",
-    "slug": "mobile",
+    "slug": "fraud-chicken-bye",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/chicken.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/chicken.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFFDF9"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fraudchickenbye.app"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/chicken.png",
+        "backgroundColor": "#FFFDF9"
       },
+      "package": "com.fraudchickenbye.app",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png",
-      "description": "歡迎使用家庭群組功能，請透過以下網址開始使用吧！"
+      "name": "真識監詐 - 詐騙掰家庭群組",
+      "shortName": "真識監詐",
+      "favicon": "./assets/chicken.png",
+      "description": "歡迎使用家庭群組功能，請透過以下網址開始使用吧！",
+      "bundler": "metro"
     }
   }
 }
