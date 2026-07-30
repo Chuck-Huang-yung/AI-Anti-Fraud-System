@@ -92,7 +92,7 @@ export default function RootNavigator() {
           ];
 
           if (route?.name && newsPages.includes(route.name)) {
-            return "真識監詐";
+            return "其他假新聞相關資訊";
           }
 
           return "詐騙掰家庭群組";
