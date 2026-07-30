@@ -62,16 +62,27 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
   } | null>(null);
 
   useEffect(() => {
+    // 🌟 加上這個旗標，防止 React 開發環境下執行兩次導致 LIFF 當機
+    let isInitialized = false;
+
     const initLiffAndFetchData = async () => {
+      if (isInitialized) return;
+      isInitialized = true;
+
       try {
         const liffCore = (liff as any).default || liff;
 
-        // 🌟 1. 清理潛在的登入殘留狀態
-        // 確保重新整理時，不會因為舊的 LIFF 狀態導致 400 錯誤
+        // 🌟 1. 先讓 LIFF 正常初始化 (讓它把網址上的 code 吃掉並完成登入)
+        await liffCore.init({
+          liffId: "2009712421-QF2zlOtI",
+          withLoginOnExternalBrowser: true,
+        });
+
+        // 🌟 2. 等 LIFF 確定吃完、登入成功後，我們再把網址洗乾淨！
         if (typeof window !== "undefined") {
           const urlParams = new URLSearchParams(window.location.search);
           if (urlParams.has("code") || urlParams.has("liff.state")) {
-            // 雖然是 LIFF，但我們依然協助清理網址列，避免 LIFF SDK 被混淆
+            // 安全淨化網址，預防下次手動重新整理時噴 400 錯誤
             window.history.replaceState(
               {},
               document.title,
@@ -79,13 +90,6 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
             );
           }
         }
-
-        // 🌟 2. 執行 LIFF 初始化，並加入 withLoginOnExternalBrowser 參數
-        // 這能提升在非 LINE App 內部瀏覽器（如 Chrome/Safari）開啟時的穩定度
-        await liffCore.init({
-          liffId: "2009712421-QF2zlOtI",
-          withLoginOnExternalBrowser: true,
-        });
 
         if (liffCore.isLoggedIn()) {
           const profile = await liffCore.getProfile();
@@ -95,29 +99,22 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
           });
           fetchUserGroups(profile.userId);
         } else {
-          // ❌ 原本寫的這句會在沒登入時一直卡死頁面：
-          // liffCore.login();
-
-          // ✅ 修改為：如果是透過瀏覽器/獨立測試，自動使用模擬身份放行！
+          // 本地測試身分放行邏輯維持不變
           console.warn("⚠️ 目前未登入 LINE，進入本地開發/新聞獨立測試模式");
           setCurrentUser({
             userId: "test_dev_user",
             userName: "開發測試員",
           });
-          // 讓你不要被小雞 Loading 擋在外面
         }
       } catch (error) {
-        console.error(
-          "❌ LIFF 初始化失敗，自動切換為測試身分以便瀏覽頁面",
-          error,
-        );
-        // 當 LIFF 發生 CORS 或環境報錯時，依然放行讓你看到 UI
+        console.error("❌ LIFF 初始化失敗:", error);
         setCurrentUser({
           userId: "test_dev_user",
           userName: "開發測試員",
         });
       }
     };
+
     initLiffAndFetchData();
   }, []);
 

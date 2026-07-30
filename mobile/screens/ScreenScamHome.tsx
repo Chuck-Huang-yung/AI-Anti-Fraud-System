@@ -87,33 +87,37 @@ const styles = StyleSheet.create({
   // 標題換上深可可棕，跟其他頁面字體配色呼應
   headerTitle: { fontSize: 19, fontWeight: "900", color: "#4a3b32" },
 
-  container: { flex: 1, padding: 16, backgroundColor: "#faf6f0" },
+  container: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: "#faf6f0",
+  },
 
-  // ☕ 首頁卡片共用樣式：改為相框感奶茶邊框，並設定 overflow 讓圖片切出漂亮圓角
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 24,
     borderWidth: 2,
-    borderColor: "#e8ded4", // 溫暖的濃奶茶色邊框
-    overflow: "hidden", // 🌟 關鍵：讓內層插圖順著圓角裁切，毫無破綻
+    borderColor: "#e8ded4",
+    overflow: "hidden",
     ...Platform.select({
-      web: { boxShadow: "0px 6px 16px rgba(74, 59, 50, 0.08)" },
+      web: { boxShadow: "0px 4px 12px rgba(74, 59, 50, 0.06)" },
       default: {
         shadowColor: "#4a3b32",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+        elevation: 2,
       },
     }),
   },
-  // 讓圖片滿版貼合卡片，視覺衝擊力最強
+
   cardImage: {
     width: "100%",
     height: "100%",
   },
 
-  topCard: { flex: 1.1, marginBottom: 16 },
-  bottomRow: { flex: 1, flexDirection: "row", gap: 16 },
+  topCard: { flex: 1.1, marginBottom: 20 }, // 🌟 稍微增加上方大卡片與下方卡片的距離
+  bottomRow: { flex: 1, flexDirection: "row", gap: 20 }, // 🌟 稍微拉開下方兩張小卡片的間距
   bottomCard: { flex: 1 },
 });
