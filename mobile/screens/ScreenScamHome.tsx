@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 24,
-    borderWidth: 8,
+    borderWidth: 6,
     borderColor: "#e8ded4", // 溫暖的濃奶茶色邊框
     overflow: "hidden", // 🌟 關鍵：讓內層插圖順著圓角裁切，毫無破綻
     ...Platform.select({
