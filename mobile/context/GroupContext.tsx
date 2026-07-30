@@ -61,12 +61,10 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
     userName: string;
   } | null>(null);
 
-  // 3. 畫面載入時：初始化 LIFF 並且跟後端要資料
   useEffect(() => {
     const initLiffAndFetchData = async () => {
       try {
         const liffCore = (liff as any).default || liff;
-
         await liffCore.init({ liffId: "2009712421-QF2zlOtI" });
 
         if (liffCore.isLoggedIn()) {
@@ -75,13 +73,29 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
             userId: profile.userId,
             userName: profile.displayName,
           });
-
           fetchUserGroups(profile.userId);
         } else {
-          liffCore.login();
+          // ❌ 原本寫的這句會在沒登入時一直卡死頁面：
+          // liffCore.login();
+
+          // ✅ 修改為：如果是透過瀏覽器/獨立測試，自動使用模擬身份放行！
+          console.warn("⚠️ 目前未登入 LINE，進入本地開發/新聞獨立測試模式");
+          setCurrentUser({
+            userId: "test_dev_user",
+            userName: "開發測試員",
+          });
+          // 讓你不要被小雞 Loading 擋在外面
         }
       } catch (error) {
-        console.error("❌ LIFF 初始化失敗", error);
+        console.error(
+          "❌ LIFF 初始化失敗，自動切換為測試身分以便瀏覽頁面",
+          error,
+        );
+        // 當 LIFF 發生 CORS 或環境報錯時，依然放行讓你看到 UI
+        setCurrentUser({
+          userId: "test_dev_user",
+          userName: "開發測試員",
+        });
       }
     };
     initLiffAndFetchData();
