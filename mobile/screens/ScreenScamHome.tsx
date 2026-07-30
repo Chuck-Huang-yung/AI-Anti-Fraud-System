@@ -28,7 +28,7 @@ export default function Index() {
         >
           <Image
             // 💡 請確認圖片的存放資料夾與名稱是否相符（例如 ./assets/ 或 ../assets/）
-            source={require("../assets/part1_fina2.png")}
+            source={require("../assets/part1_final2.png")}
             style={styles.cardImage}
             contentFit="cover" // 注意 expo-image 的屬性叫 contentFit 而不是 resizeMode
             cachePolicy="memory-disk" // 🌟 啟動磁碟與記憶體雙快取！
