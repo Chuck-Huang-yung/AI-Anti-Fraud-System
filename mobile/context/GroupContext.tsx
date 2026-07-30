@@ -65,7 +65,27 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
     const initLiffAndFetchData = async () => {
       try {
         const liffCore = (liff as any).default || liff;
-        await liffCore.init({ liffId: "2009712421-QF2zlOtI" });
+
+        // 🌟 1. 清理潛在的登入殘留狀態
+        // 確保重新整理時，不會因為舊的 LIFF 狀態導致 400 錯誤
+        if (typeof window !== "undefined") {
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.has("code") || urlParams.has("liff.state")) {
+            // 雖然是 LIFF，但我們依然協助清理網址列，避免 LIFF SDK 被混淆
+            window.history.replaceState(
+              {},
+              document.title,
+              window.location.pathname,
+            );
+          }
+        }
+
+        // 🌟 2. 執行 LIFF 初始化，並加入 withLoginOnExternalBrowser 參數
+        // 這能提升在非 LINE App 內部瀏覽器（如 Chrome/Safari）開啟時的穩定度
+        await liffCore.init({
+          liffId: "2009712421-QF2zlOtI",
+          withLoginOnExternalBrowser: true,
+        });
 
         if (liffCore.isLoggedIn()) {
           const profile = await liffCore.getProfile();

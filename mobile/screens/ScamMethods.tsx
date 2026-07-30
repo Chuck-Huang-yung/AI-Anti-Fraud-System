@@ -413,7 +413,7 @@ export default function ScamMethods() {
         ctx.textAlign = "center";
         ctx.font = `900 24px ${fontStack}`;
         ctx.fillStyle = "#8c6b58";
-        ctx.fillText("https://fraudchickenbye.com", centerX, 955);
+        ctx.fillText("https://news.fraudchickenbye.com/", centerX, 955);
 
         // 13. 輸出圖片
         const dataUri = canvas.toDataURL("image/png");
@@ -658,7 +658,8 @@ export default function ScamMethods() {
                   </View>
                   <View style={styles.shareCardFooter}>
                     <Text style={styles.shareCardFooterText}>
-                      👉 立即掃描或點擊挑戰：{"\n"}https://fraudchickenbye.com
+                      👉 立即掃描或點擊挑戰：{"\n"}
+                      https://news.fraudchickenbye.com/
                     </Text>
                   </View>
                 </View>
@@ -689,7 +690,7 @@ export default function ScamMethods() {
                 onPress={async () => {
                   try {
                     await Clipboard.setStringAsync(
-                      `我剛獲得了 ${score * 10} 分的防詐指數！快來測驗您的防禦力！\nhttps://fraudchickenbye.com/`,
+                      `我剛獲得了 ${score * 10} 分的防詐指數！快來測驗您的防禦力！\nhttps://news.fraudchickenbye.com/`,
                     );
                     setShareModalVisible(false);
                     setTimeout(
