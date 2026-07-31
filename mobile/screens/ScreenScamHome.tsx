@@ -45,7 +45,7 @@ export default function Index() {
             activeOpacity={0.85}
           >
             <Image
-              source={require("../assets/part2_final2.png")}
+              source={require("../assets/part2_final3.png")}
               style={styles.cardImage}
               contentFit="cover" // 注意 expo-image 的屬性叫 contentFit 而不是 resizeMode
               cachePolicy="memory-disk" // 🌟 啟動磁碟與記憶體雙快取！
