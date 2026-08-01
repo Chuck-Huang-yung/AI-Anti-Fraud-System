@@ -104,6 +104,38 @@ export default function ScreenMemberList({ navigation, route }: any) {
     setAlertVisible(true);
   };
 
+  // 🌟 暴力測試版：播放溫馨提示音
+  const playGentleAlertSound = () => {
+    console.log("🔊 準備播放音效... Platform 狀態:", Platform.OS);
+
+    if (Platform.OS === "web") {
+      try {
+        // 💡 確保使用當前網域的絕對路徑
+        const audioUrl = window.location.origin + "/alert.mp3";
+        console.log("🎵 嘗試讀取的音檔網址:", audioUrl);
+
+        const alarmSound = new Audio(audioUrl);
+
+        // 💡 測試階段先開到最大聲
+        alarmSound.volume = 1.0;
+
+        let playPromise = alarmSound.play();
+
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log("✅ 音效順利播放中！");
+            })
+            .catch((err) => {
+              console.log("❌ 音效被阻擋或發生錯誤：", err);
+            });
+        }
+      } catch (err) {
+        console.log("❌ 音效物件建立失敗:", err);
+      }
+    }
+  };
+
   useEffect(() => {
     const fetchMyLiffProfile = async () => {
       try {
@@ -422,6 +454,7 @@ export default function ScreenMemberList({ navigation, route }: any) {
 
                   if (currentUid && targetUid && currentUid === targetUid) {
                     console.log("⛔ [前端資安攔截] 當事人試圖自行解除警報！");
+                    playGentleAlertSound();
                     return showCustomAlert(
                       "⛔",
                       "安全防護機制",
