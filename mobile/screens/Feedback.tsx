@@ -25,7 +25,7 @@ export default function Feedback() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // 🌟 新增：控制我們自製奶茶確認彈窗的開關
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
-
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
   // 📸 打開相簿選擇圖片 (並轉換成 Base64 以便傳給資料庫)
   const pickImage = async () => {
     const permissionResult =
@@ -74,10 +74,9 @@ export default function Feedback() {
 
       if (!response.ok) throw new Error("傳送失敗");
 
-      alert("🎉 感謝您的回報與分享！您的寶貴經驗將幫助我們守護更多家庭。");
+      setSuccessModalVisible(true);
       setFeedbackText("");
       setSelectedImage(null);
-      navigation.goBack();
     } catch (error) {
       console.error("回報送出失敗:", error);
       alert("⚠️ 無法連線到伺服器，請確認網路或伺服器狀態。");
@@ -194,6 +193,43 @@ export default function Feedback() {
                 onPress={executeSubmit}
               >
                 <Text style={styles.alertBtnConfirmText}>確定送出</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {/* 🌟 新增：送出成功後的專屬奶茶彈窗 */}
+      <Modal
+        animationType="fade" // 讓成功的彈窗有點不同的動畫
+        transparent={true}
+        visible={successModalVisible}
+        onRequestClose={() => {
+          setSuccessModalVisible(false);
+          navigation.goBack();
+        }}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={styles.alertBox}>
+            <Text style={styles.alertIcon}>🎉</Text>
+            <Text style={styles.alertTitle}>回報成功！</Text>
+            <Text style={styles.alertMessage}>
+              感謝您的回報與分享！您的寶貴經驗將幫助我們守護更多家庭。
+            </Text>
+
+            <View style={styles.alertBtnRow}>
+              {/* 成功視窗只需要一個大大的確認按鈕，所以寬度設為 100% */}
+              <TouchableOpacity
+                style={[
+                  styles.alertBtn,
+                  styles.alertBtnConfirm,
+                  { width: "100%" },
+                ]}
+                onPress={() => {
+                  setSuccessModalVisible(false);
+                  navigation.goBack(); // 👈 在這裡才執行返回上一頁
+                }}
+              >
+                <Text style={styles.alertBtnConfirmText}>我知道了</Text>
               </TouchableOpacity>
             </View>
           </View>
