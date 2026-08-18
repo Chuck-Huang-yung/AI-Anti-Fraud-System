@@ -17,7 +17,7 @@ import liff from "@line/liff";
 import axios from "axios";
 
 // 💡 記得換成你最新的 Ngrok 網址
-const API_URL = "https://5edb-220-130-167-166.ngrok-free.app";
+const API_URL = "https://b5c3-220-130-167-166.ngrok-free.app";
 
 const axiosConfig = {
   headers: {

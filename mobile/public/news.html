@@ -3,29 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>真識監詐</title>
+    <title>真識監詐 - 假新聞資訊</title>
 
-    <style>
-      #root,
-      body,
-      html {
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-      }
-    </style>
-
+    <!-- 👇 完全複製你原本設定好的假新聞專屬 OG 標籤 -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="其他假新聞資訊" />
+    <meta property="og:title" content="其他假新聞相關資訊" />
     <meta
       property="og:description"
       content="學習最新詐騙手法，掌握政府最新防詐動態。"
@@ -35,22 +19,15 @@
     <meta property="og:image:height" content="1024" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://fraudchickenbye.com/news.png" />
+
+    <script>
+      // 👇 神奇魔法：真人點擊網址後，瞬間將網頁轉跳回你的主程式 (index.html)
+      window.location.replace("/");
+    </script>
   </head>
 
   <body>
-    <script>
-      (function () {
-        try {
-          // 清空網頁端所有的本地儲存，確保群組資訊不被保留
-          localStorage.clear();
-          sessionStorage.clear();
-          console.log("群組快取已清空");
-        } catch (e) {
-          console.error("清空快取失敗", e);
-        }
-      })();
-    </script>
-
-    <div id="root"></div>
+    <!-- 轉跳瞬間的過渡畫面，通常快到看不見 -->
+    <p style="text-align: center; margin-top: 50px">正在前往假新聞專區...</p>
   </body>
 </html>

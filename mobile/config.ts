@@ -1,7 +1,7 @@
 // mobile/config.ts
 
 // 🌟 1. 全域統一的後端 API 網址 (只要 ngrok 或 localtunnel 重開，改這裡就好！)
-export const API_URL = "https://5edb-220-130-167-166.ngrok-free.app";
+export const API_URL = "https://b5c3-220-130-167-166.ngrok-free.app";
 
 // 🌟 2. 全域統一的 Axios 請求標頭 (順便把你要繞過 ngrok/localtunnel 警告的設定集中起來)
 export const AXIOS_CONFIG = {

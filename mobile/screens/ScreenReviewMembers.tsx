@@ -14,7 +14,7 @@ import {
 import axios from "axios";
 
 // 💡 請確認這裡是你當下最新的 API 網址[cite: 7]
-const API_URL = "https://5edb-220-130-167-166.ngrok-free.app";
+const API_URL = "https://b5c3-220-130-167-166.ngrok-free.app";
 
 export default function ScreenReviewMembers({ navigation, route }: any) {
   const group = route.params?.group || {};
