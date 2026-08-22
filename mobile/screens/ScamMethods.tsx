@@ -535,7 +535,7 @@ export default function ScamMethods() {
                   <Text style={styles.scoreHighlight}>{score * 10}</Text> 分
                 </Text>
                 <Text style={styles.scoreSub}>
-                  成功答對了 {score} / 10 題，快把測驗分享給家裡長輩！
+                  成功答對了 {score} / 10 題，快把測驗分享給其他人吧！
                 </Text>
 
                 {/* 🟢 新增的弱點分析小看板 */}
