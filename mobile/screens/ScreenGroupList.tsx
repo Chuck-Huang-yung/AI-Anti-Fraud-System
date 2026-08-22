@@ -803,7 +803,7 @@ export default function ScreenGroupList({ navigation }: any) {
                 disabled={isLeaving}
               >
                 <Text style={styles.transferBtnText}>
-                  {isLeaving ? "處理中..." : "👑 移交並退出"}
+                  {isLeaving ? "處理中..." : "移交並退出"}
                 </Text>
               </Pressable>
             </View>
