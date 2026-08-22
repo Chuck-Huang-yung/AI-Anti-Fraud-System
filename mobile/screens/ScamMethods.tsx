@@ -35,6 +35,7 @@ let globalScore = 0;
 let globalIsQuizFinished = false;
 let globalShowResult = false;
 let globalIsAnswerCorrect = false;
+let globalCategoryMistakes: Record<string, number> = {};
 
 // 🌟 新增：如果是在網頁/LINE瀏覽器中，嘗試從分頁暫存恢復上一頁的記憶
 if (Platform.OS === "web" && typeof sessionStorage !== "undefined") {
@@ -46,6 +47,11 @@ if (Platform.OS === "web" && typeof sessionStorage !== "undefined") {
     globalIsQuizFinished = sessionStorage.getItem("scam_finished") === "true";
     globalShowResult = sessionStorage.getItem("scam_showResult") === "true";
     globalIsAnswerCorrect = sessionStorage.getItem("scam_correct") === "true";
+
+    const savedMistakes = sessionStorage.getItem("scam_mistakes");
+    if (savedMistakes) {
+      globalCategoryMistakes = JSON.parse(savedMistakes);
+    }
   }
 }
 
@@ -62,6 +68,9 @@ export default function ScamMethods() {
   const [showResult, setShowResult] = useState(globalShowResult);
   const [isAnswerCorrect, setIsAnswerCorrect] = useState(globalIsAnswerCorrect);
   const [score, setScore] = useState(globalScore);
+  const [categoryMistakes, setCategoryMistakes] = useState<
+    Record<string, number>
+  >(globalCategoryMistakes);
 
   const [shareImageUri, setShareImageUri] = useState<string | null>(null);
   const [shareModalVisible, setShareModalVisible] = useState(false);
@@ -104,6 +113,7 @@ export default function ScamMethods() {
     globalIsQuizFinished = isQuizFinished;
     globalShowResult = showResult;
     globalIsAnswerCorrect = isAnswerCorrect;
+    globalCategoryMistakes = categoryMistakes;
 
     // 🌟 新增：只要進度有變，就立刻寫入瀏覽器暫存！
     if (Platform.OS === "web" && typeof sessionStorage !== "undefined") {
@@ -113,6 +123,7 @@ export default function ScamMethods() {
       sessionStorage.setItem("scam_finished", isQuizFinished.toString());
       sessionStorage.setItem("scam_showResult", showResult.toString());
       sessionStorage.setItem("scam_correct", isAnswerCorrect.toString());
+      sessionStorage.setItem("scam_mistakes", JSON.stringify(categoryMistakes));
     }
   }, [
     quizPool,
@@ -122,6 +133,7 @@ export default function ScamMethods() {
     isQuizFinished,
     showResult,
     isAnswerCorrect,
+    categoryMistakes,
   ]);
 
   const position = useRef(new Animated.ValueXY()).current;
@@ -173,6 +185,15 @@ export default function ScamMethods() {
 
     if (correct) {
       setScore((prev) => prev + 1);
+    } else {
+      // 🌟 新增：如果答錯了，就把這題的 category 記上一筆！
+      setCategoryMistakes((prev) => {
+        const cat = currentCard.category || "未分類";
+        return {
+          ...prev,
+          [cat]: (prev[cat] || 0) + 1,
+        };
+      });
     }
 
     setIsAnswerCorrect(correct);
@@ -255,6 +276,7 @@ export default function ScamMethods() {
     setScore(0);
     setShowResult(false);
     setIsQuizFinished(false);
+    setCategoryMistakes({});
     position.setValue({ x: 0, y: 0 });
   };
 
@@ -279,6 +301,23 @@ export default function ScamMethods() {
         console.log("無法開啟超連結:", error);
       }
     }
+  };
+
+  const getWeaknessAnalysis = () => {
+    if (Object.keys(categoryMistakes).length === 0) {
+      return "太厲害了！您的防護力毫無死角！💯";
+    }
+
+    let maxMistakes = 0;
+    let weakestCategory = "";
+    for (const [category, count] of Object.entries(categoryMistakes)) {
+      if (count > maxMistakes) {
+        maxMistakes = count;
+        weakestCategory = category;
+      }
+    }
+
+    return `💡 弱點分析：您在「${weakestCategory}」類型的題目最容易被騙（錯了 ${maxMistakes} 題），建議多加留意！`;
   };
 
   // 🌟 終極大絕招：Canvas 巨量字體 + 暴力拆分絕對置中版 (完全無更動)
@@ -498,6 +537,29 @@ export default function ScamMethods() {
                 <Text style={styles.scoreSub}>
                   成功答對了 {score} / 10 題，快把測驗分享給家裡長輩！
                 </Text>
+
+                {/* 🟢 新增的弱點分析小看板 */}
+                <View
+                  style={{
+                    backgroundColor: "#f3e8df",
+                    padding: 12,
+                    borderRadius: 10,
+                    width: "100%",
+                    marginBottom: 20,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: "#5c4738",
+                      fontWeight: "700",
+                      textAlign: "center",
+                      lineHeight: 20,
+                    }}
+                  >
+                    {getWeaknessAnalysis()}
+                  </Text>
+                </View>
 
                 <TouchableOpacity
                   style={styles.shareLargeBtn}
