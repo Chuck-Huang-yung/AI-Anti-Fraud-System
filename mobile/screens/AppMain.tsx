@@ -35,7 +35,7 @@ export default function AppMain({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(true);
   // 🌟 2. 新增：用來暫存新用戶 LINE 大頭照的 State！
   const [avatarUrl, setAvatarUrl] = useState("");
-  const { setGroups } = useGroups(); // 💡 2. 拿出 setGroups 工具
+  //const { setGroups } = useGroups(); // 💡 2. 拿出 setGroups 工具
   // 🌟 客製化摩卡棕提示視窗專用狀態
   const [alertModalVisible, setAlertModalVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
@@ -68,24 +68,6 @@ export default function AppMain({ navigation }: any) {
           );
 
           if (response.data.isRegistered) {
-            // 🌟 核心實現你的理想流程：登入成功後、進入系統前，直接去資料庫撈出你所有的群組！
-            try {
-              // 🌟 這裡也要加上 axiosConfig！
-              const groupsRes = await axios.get(
-                `${API_URL}/api/groups/user/${userId}`,
-                axiosConfig,
-              );
-              if (groupsRes.data && groupsRes.data.success) {
-                setGroups(groupsRes.data.groups); // 提前塞入全域記憶體！
-                console.log(
-                  "✅ 登入時已成功預載資料庫群組數量：",
-                  groupsRes.data.groups.length,
-                );
-              }
-            } catch (gErr) {
-              console.error("預先載入群組失敗:", gErr);
-            }
-
             // 資料庫資料準備完畢，秒進主系統！首頁立刻顯示群組！
             navigation.replace("Tabs");
           } else {
