@@ -35,14 +35,13 @@ const axiosConfig = {
 };
 
 export default function ScreenGroupList({ navigation }: any) {
-  const { groups, setGroups } = useGroups();
+  const { groups, setGroups, currentUser } = useGroups();
   const [query, setQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuGroupId, setMenuGroupId] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // 🌟 管理員退出專用的移交狀態
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -55,7 +54,7 @@ export default function ScreenGroupList({ navigation }: any) {
   const [isLeaving, setIsLeaving] = useState(false);
   // 🌟 防止彈跳視窗重複觸發的紀錄器
   const hasAlertedRedLight = useRef(false);
-  const isFetchingRef = useRef(false);
+  const lastFetchTime = useRef(0);
   // 🌟 偵測是否有紅燈成員，並跳出緊急彈窗
   useEffect(() => {
     // 找出第一個有可疑成員的群組
@@ -74,7 +73,18 @@ export default function ScreenGroupList({ navigation }: any) {
       showPopup(
         "🚨",
         "緊急防詐通報",
-        `您的群組「${redGroup.name}」中，成員「${suspectName}」目前處於紅燈警戒！\n\n請立即前往確認情況！`,
+        <Text>
+          您的群組「
+          <Text style={{ fontWeight: "900", color: "#D32F2F", fontSize: 16 }}>
+            {redGroup.name}
+          </Text>
+          」中， 成員「
+          <Text style={{ fontWeight: "900", color: "#D32F2F", fontSize: 16 }}>
+            {suspectName}
+          </Text>
+          」目前處於紅燈警戒！
+          {"\n\n"}請立即前往確認情況！
+        </Text>,
         () => {
           // 點擊確認後，直接跳轉到該群組的成員列表
           navigation.navigate("MemberList", { group: redGroup });
@@ -89,7 +99,7 @@ export default function ScreenGroupList({ navigation }: any) {
 
   // 🌟 新增：客製化摩卡棕提示視窗專用狀態
   const [popupVisible, setPopupVisible] = useState(false);
-  const [popupData, setPopupData] = useState({
+  const [popupData, setPopupData] = useState<any>({
     icon: "💡",
     title: "",
     message: "",
@@ -100,7 +110,7 @@ export default function ScreenGroupList({ navigation }: any) {
   const showPopup = (
     icon: string,
     title: string,
-    message: string,
+    message: any,
     onConfirmAction?: () => void,
     btnText = "確定",
   ) => {
@@ -122,12 +132,15 @@ export default function ScreenGroupList({ navigation }: any) {
   };
 
   const fetchMyGroups = async (userId: string) => {
-    // 🛡️ 終極防護：如果已經在抓取中，就直接擋掉後續的重複呼叫！
-    if (isFetchingRef.current) {
+    const now = Date.now();
+    // 🛡️ 2 秒護盾：如果距離上次抓取還不到 2000 毫秒 (2秒)，直接擋掉！
+    if (now - lastFetchTime.current < 2000) {
+      console.log("🔕 [前端智能去重] 短時間內重複呼叫 API，已自動攔截！");
       return;
     }
 
-    isFetchingRef.current = true; // 🔒 上鎖：我開始抓資料了，後面的請求不要進來！
+    lastFetchTime.current = now; // 🔒 記錄這次通過並開始抓取的時間
+
     try {
       console.log(`[前端發出請求] 正在抓取用戶 ${userId} 的群組...`);
       const response = await axios.get(
@@ -170,48 +183,27 @@ export default function ScreenGroupList({ navigation }: any) {
     } finally {
       setIsLoading(false);
       setRefreshing(false);
-      isFetchingRef.current = false; // 🔓 解鎖：抓取完畢，開放下一次正常更新
     }
   };
 
-  useEffect(() => {
-    const initAndFetch = async () => {
-      try {
-        await liff.init({ liffId: "2009712421-QF2zlOtI" });
-        if (liff.isLoggedIn()) {
-          const profile = await liff.getProfile();
-          setCurrentUserId(profile.userId);
-          //await fetchMyGroups(profile.userId);
-        } else {
-          setIsLoading(false);
-          showAlert("提示", "未能登入 LINE，無法取得使用者身分");
-        }
-      } catch (err) {
-        console.error("LIFF 初始化失敗:", err);
-        setIsLoading(false);
-      }
-    };
-    initAndFetch();
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
-      if (currentUserId) {
-        fetchMyGroups(currentUserId);
+      if (currentUser?.userId) {
+        fetchMyGroups(currentUser?.userId);
       }
-    }, [currentUserId]),
+    }, [currentUser?.userId]),
   );
 
   const onRefresh = () => {
-    if (currentUserId) {
+    if (currentUser?.userId) {
       setRefreshing(true);
-      fetchMyGroups(currentUserId);
+      fetchMyGroups(currentUser?.userId);
     }
   };
 
   const handleTogglePin = async (groupId: string) => {
     const target = groups.find((g) => g.id === groupId);
-    if (!target || !currentUserId) return;
+    if (!target || !currentUser?.userId) return;
     const nextPinned = !target.isPinned;
 
     setGroups((prev: any[]) =>
@@ -221,7 +213,7 @@ export default function ScreenGroupList({ navigation }: any) {
     try {
       await axios.post(
         `${API_URL}/api/groups/toggle-pin`,
-        { groupId, userId: currentUserId, isPinned: nextPinned },
+        { groupId, userId: currentUser?.userId, isPinned: nextPinned },
         axiosConfig,
       );
     } catch (err) {
@@ -270,7 +262,7 @@ export default function ScreenGroupList({ navigation }: any) {
       await axios.post(
         `${API_URL}/api/groups/toggle-mute`,
         // 🌟 正確：將鍵值指定為你第 45 行宣告的 currentUserId！
-        { groupId, userId: currentUserId, muted: nextMuted },
+        { groupId, userId: currentUser?.userId, muted: nextMuted },
         axiosConfig,
       );
     } catch (error) {
@@ -285,18 +277,20 @@ export default function ScreenGroupList({ navigation }: any) {
   const leaveGroup = () => {
     const tid = menuGroupId;
     const targetGroup = groups.find((g) => g.id === tid);
-    if (!targetGroup || !currentUserId) return;
+    if (!targetGroup || !currentUser?.userId) return;
     closeMenu();
 
     const members = targetGroup.members || [];
     const me = members.find(
       (m: any) =>
-        (m.userId || m.id || "").toLowerCase() === currentUserId.toLowerCase(),
+        (m.userId || m.id || "").toLowerCase() ===
+        currentUser?.userId.toLowerCase(),
     );
     const isMyAdmin = me?.role === "管理員";
     const remainingMembers = members.filter(
       (m: any) =>
-        (m.userId || m.id || "").toLowerCase() !== currentUserId.toLowerCase(),
+        (m.userId || m.id || "").toLowerCase() !==
+        currentUser?.userId.toLowerCase(),
     );
 
     if (remainingMembers.length === 0) {
@@ -330,14 +324,14 @@ export default function ScreenGroupList({ navigation }: any) {
     groupId: string,
     successorId?: string | null,
   ) => {
-    if (!currentUserId) return;
+    if (!currentUser?.userId) return;
     setIsLeaving(true);
     try {
       const res = await axios.post(
         `${API_URL}/api/groups/leave`,
         {
           groupId: groupId,
-          userId: currentUserId,
+          userId: currentUser?.userId,
           newAdminId: successorId || undefined,
         },
         axiosConfig,
@@ -371,12 +365,12 @@ export default function ScreenGroupList({ navigation }: any) {
     const targetGroup = groups.find((g) => g.id === tid);
     closeMenu();
 
-    if (!targetGroup || !currentUserId) return;
+    if (!targetGroup || !currentUser?.userId) return;
 
     const me = targetGroup.members?.find(
       (m: any) =>
         (m.userId || m.id || "").trim().toLowerCase() ===
-        currentUserId.trim().toLowerCase(),
+        currentUser?.userId.trim().toLowerCase(),
     );
     if (me?.role !== "管理員") {
       setTimeout(() => {
@@ -400,12 +394,12 @@ export default function ScreenGroupList({ navigation }: any) {
   };
 
   const executeDeleteGroup = async (groupId: string) => {
-    if (!currentUserId) return;
+    if (!currentUser?.userId) return;
     setIsLoading(true);
     try {
       const res = await axios.post(
         `${API_URL}/api/groups/delete`,
-        { groupId, userId: currentUserId },
+        { groupId, userId: currentUser?.userId },
         axiosConfig,
       );
 
@@ -559,7 +553,7 @@ export default function ScreenGroupList({ navigation }: any) {
           renderItem={({ item }: any) => {
             const isAdmin = item.members?.some(
               (m: any) =>
-                m.userId?.toLowerCase() === currentUserId?.toLowerCase() &&
+                m.userId?.toLowerCase() === currentUser?.userId.toLowerCase() &&
                 m.role === "管理員",
             );
             const hasPending = (item.pendingCount || 0) > 0;
@@ -733,7 +727,7 @@ export default function ScreenGroupList({ navigation }: any) {
             const me = tg?.members?.find(
               (m: any) =>
                 (m.userId || m.id || "").trim().toLowerCase() ===
-                currentUserId?.trim().toLowerCase(),
+                currentUser?.userId.trim().toLowerCase(),
             );
             if (me?.role === "管理員") {
               return (
@@ -784,7 +778,7 @@ export default function ScreenGroupList({ navigation }: any) {
                 .filter(
                   (m: any) =>
                     (m.userId || m.id || "").toLowerCase() !==
-                    currentUserId?.toLowerCase(),
+                    currentUser?.userId.toLowerCase(),
                 )
                 .map((m: any, idx: number) => {
                   const mId = m.userId || m.id || `sub-${idx}`;

@@ -73,7 +73,7 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
             userId: profile.userId,
             userName: profile.displayName,
           });
-          fetchUserGroups(profile.userId);
+          //fetchUserGroups(profile.userId);
         } else {
           // ❌ 原本寫的這句會在沒登入時一直卡死頁面：
           // liffCore.login();
@@ -100,47 +100,6 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({
     };
     initLiffAndFetchData();
   }, []);
-
-  const fetchUserGroups = async (userId: string) => {
-    try {
-      // 🌟 關鍵修復 1：加上 /user/ 才是正確的後端路由！[cite: 3, 4]
-      // 🌟 關鍵修復 2：加上 headers 繞過 ngrok 的 HTML 警告頁面！[cite: 4]
-      const response = await fetch(
-        `${API_BASE_URL}/api/groups/user/${userId}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "ngrok-skip-browser-warning": "true",
-            "Bypass-Tunnel-Reminder": "true",
-          },
-        },
-      );
-
-      const data = await response.json();
-      if (data.success) {
-        // 🌟 直接接收後端為我們整理好的完整資訊（包含待審核人數與狀態）
-        const formattedGroups = data.groups.map((g: any) => ({
-          id: g.id || g.group_id,
-          name: g.name || g.group_name,
-          status: g.status,
-          createdAt: new Date(
-            g.created_at || g.createdAt || Date.now(),
-          ).getTime(),
-          members: g.members || [],
-          muted: g.muted || false,
-          isMuted: g.isMuted || g.muted || false,
-          isPinned: g.isPinned || false,
-          membersCount: g.membersCount || (g.members ? g.members.length : 1),
-          pendingMembers: g.pendingMembers || [],
-          pendingCount: g.pendingCount || 0,
-        }));
-        setGroups(formattedGroups);
-      }
-    } catch (error) {
-      console.error("❌ 獲取群組失敗", error);
-    }
-  };
 
   // 4. 建立群組：打 API 寫入 PostgreSQL
   const createGroup = async (groupName: string) => {
