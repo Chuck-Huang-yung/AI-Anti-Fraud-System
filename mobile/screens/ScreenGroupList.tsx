@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import {
   SafeAreaView,
   StyleSheet,
@@ -47,6 +53,39 @@ export default function ScreenGroupList({ navigation }: any) {
     null,
   );
   const [isLeaving, setIsLeaving] = useState(false);
+  // 🌟 防止彈跳視窗重複觸發的紀錄器
+  const hasAlertedRedLight = useRef(false);
+
+  // 🌟 偵測是否有紅燈成員，並跳出緊急彈窗
+  useEffect(() => {
+    // 找出第一個有可疑成員的群組
+    const redGroup = groups.find((g) =>
+      g.members?.some((m: any) => m.status === "可疑"),
+    );
+
+    if (redGroup && !hasAlertedRedLight.current) {
+      const suspect = redGroup.members.find((m: any) => m.status === "可疑");
+      const suspectName = suspect?.userName || "家人";
+
+      // 標記已通知過，避免切換畫面時一直煩人
+      hasAlertedRedLight.current = true;
+
+      // 觸發客製化摩卡棕卡片（改裝成警報版）
+      showPopup(
+        "🚨",
+        "緊急防詐通報",
+        `您的群組「${redGroup.name}」中，成員「${suspectName}」目前處於紅燈警戒！\n\n請立即前往確認情況！`,
+        () => {
+          // 點擊確認後，直接跳轉到該群組的成員列表
+          navigation.navigate("MemberList", { group: redGroup });
+        },
+        "立即前往查看",
+      );
+    } else if (!redGroup) {
+      // 如果所有群組都解除了，就把紀錄器歸零，等待下次警報
+      hasAlertedRedLight.current = false;
+    }
+  }, [groups]);
 
   // 🌟 新增：客製化摩卡棕提示視窗專用狀態
   const [popupVisible, setPopupVisible] = useState(false);
@@ -135,7 +174,7 @@ export default function ScreenGroupList({ navigation }: any) {
         if (liff.isLoggedIn()) {
           const profile = await liff.getProfile();
           setCurrentUserId(profile.userId);
-          await fetchMyGroups(profile.userId);
+          //await fetchMyGroups(profile.userId);
         } else {
           setIsLoading(false);
           showAlert("提示", "未能登入 LINE，無法取得使用者身分");
@@ -193,11 +232,15 @@ export default function ScreenGroupList({ navigation }: any) {
     const q = query.trim().toLowerCase();
     let result = q
       ? groups.filter((g) => g.name.toLowerCase().includes(q))
-      : groups;
+      : [...groups];
 
     return result.sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
+      const aHasRed = a.members?.some((m: any) => m.status === "可疑");
+      const bHasRed = b.members?.some((m: any) => m.status === "可疑");
+      if (aHasRed && !bHasRed) return -1;
+      if (!aHasRed && bHasRed) return 1;
       return 0;
     });
   }, [groups, query]);
@@ -513,7 +556,9 @@ export default function ScreenGroupList({ navigation }: any) {
                 m.role === "管理員",
             );
             const hasPending = (item.pendingCount || 0) > 0;
-
+            const hasRedLight = item.members?.some(
+              (m: any) => m.status === "可疑",
+            );
             return (
               <Pressable
                 onPress={() =>
@@ -521,13 +566,22 @@ export default function ScreenGroupList({ navigation }: any) {
                 }
                 style={[
                   styles.card,
-                  hasPending &&
-                    isAdmin && {
-                      borderColor: "#8B5A2B",
-                      borderWidth: 1.5,
-                      height: "auto",
-                      paddingVertical: 12,
-                    },
+                  // 🌟 紅燈樣式優先：深紅邊框 + 微紅背景
+                  hasRedLight
+                    ? {
+                        borderColor: "#D32F2F",
+                        borderWidth: 2,
+                        backgroundColor: "#FFF4F4",
+                      }
+                    : // 🌟 如果沒有紅燈，才檢查是否有待審核(摩卡棕邊框)
+                      hasPending && isAdmin
+                      ? {
+                          borderColor: "#8B5A2B",
+                          borderWidth: 1.5,
+                          height: "auto",
+                          paddingVertical: 12,
+                        }
+                      : {},
                 ]}
               >
                 <View style={{ flex: 1 }}>
@@ -535,6 +589,9 @@ export default function ScreenGroupList({ navigation }: any) {
                     {item.isPinned ? "📌 " : ""}
                     {item.name} (
                     {item.membersCount || item.members?.length || 0})
+                    {hasRedLight && (
+                      <Text style={{ color: "#D32F2F" }}> 🚨危險</Text>
+                    )}
                   </Text>
 
                   {isAdmin && hasPending && (
