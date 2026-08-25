@@ -55,7 +55,7 @@ export default function ScreenGroupList({ navigation }: any) {
   const [isLeaving, setIsLeaving] = useState(false);
   // 🌟 防止彈跳視窗重複觸發的紀錄器
   const hasAlertedRedLight = useRef(false);
-
+  const isFetchingRef = useRef(false);
   // 🌟 偵測是否有紅燈成員，並跳出緊急彈窗
   useEffect(() => {
     // 找出第一個有可疑成員的群組
@@ -122,6 +122,12 @@ export default function ScreenGroupList({ navigation }: any) {
   };
 
   const fetchMyGroups = async (userId: string) => {
+    // 🛡️ 終極防護：如果已經在抓取中，就直接擋掉後續的重複呼叫！
+    if (isFetchingRef.current) {
+      return;
+    }
+
+    isFetchingRef.current = true; // 🔒 上鎖：我開始抓資料了，後面的請求不要進來！
     try {
       console.log(`[前端發出請求] 正在抓取用戶 ${userId} 的群組...`);
       const response = await axios.get(
@@ -164,6 +170,7 @@ export default function ScreenGroupList({ navigation }: any) {
     } finally {
       setIsLoading(false);
       setRefreshing(false);
+      isFetchingRef.current = false; // 🔓 解鎖：抓取完畢，開放下一次正常更新
     }
   };
 
