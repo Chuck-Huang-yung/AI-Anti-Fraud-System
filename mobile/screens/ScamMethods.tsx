@@ -23,7 +23,7 @@ import { captureRef } from "react-native-view-shot";
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SWIPE_THRESHOLD = 0.25 * SCREEN_WIDTH;
 const SWIPE_OUT_DURATION = 250;
-const API_URL = "https://02f9-220-130-167-166.ngrok-free.app";
+const API_URL = "https://97e4-220-130-167-166.ngrok-free.app";
 
 // ==========================================
 // 🌟 核心解法：全域進度快取 (Global Cache)

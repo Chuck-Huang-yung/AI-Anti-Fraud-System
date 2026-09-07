@@ -18,7 +18,7 @@ import axios from "axios";
 import { useGroups } from "../context/GroupContext";
 
 // 💡 記得替換成你目前最新的 ngrok 網址
-const API_URL = "https://02f9-220-130-167-166.ngrok-free.app";
+const API_URL = "https://97e4-220-130-167-166.ngrok-free.app";
 
 // 🌟 穿透 ngrok/localtunnel 的通關密語
 const axiosConfig = {
