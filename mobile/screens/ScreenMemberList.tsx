@@ -15,7 +15,7 @@ import liff from "@line/liff";
 import axios from "axios";
 
 // 💡 記得確認為你當前最新的 API 網址
-const API_URL = "https://97e4-220-130-167-166.ngrok-free.app";
+const API_URL = "https://7e20-118-163-112-61.ngrok-free.app";
 const STORAGE_KEY_HIDE_ALERT = "@hide_one_person_group_alert_v1";
 
 type GroupItem = { id: string; name: string; muted: boolean };
