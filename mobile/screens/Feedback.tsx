@@ -17,7 +17,7 @@ import {
 } from "react-native";
 
 // 🌟 換成你們後端 ngrok 的 HTTPS 網址 (記得如果 ngrok 重新開啟網址變了，這裡要更新)
-const API_URL = "https://7e20-118-163-112-61.ngrok-free.app";
+const API_URL = "https://56ba-220-130-167-166.ngrok-free.app";
 export default function Feedback() {
   const navigation = useNavigation();
   const [feedbackText, setFeedbackText] = useState("");
