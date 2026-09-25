@@ -1,13 +1,16 @@
+from groq import Groq
 import os
 import base64
 import re
 import requests
 import io
+import time
+import tempfile
 import google.generativeai as genai
 from dotenv import load_dotenv
 from google.cloud import vision
 from google.oauth2 import service_account
-from faster_whisper import WhisperModel
+#from faster_whisper import WhisperModel
 
 # 啟動環境變數載入器 (這行非常重要，它會去讀取 backend_api 裡面的 .env)
 load_dotenv()
@@ -26,15 +29,21 @@ from pathlib import Path
 from history_checker import HistoryChecker
 from fastapi import Body
 
+# 👇👇👇 加入這行：引入你剛剛測試成功的 MacBERT 預測腳本
+from predict_fraud import load_model, predict
 
 app = FastAPI(title="Fraud Analysis Core API")
+
+macbert_tokenizer, macbert_model = load_model()
 SQLALCHEMY_DATABASE_URL = "postgresql://postgres:0509@localhost/fraud_db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
-print("⏳ 正在載入極速語音辨識模型 faster-whisper (base)...")
-whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
-print("✅ 語音辨識模型載入完成！")
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+#print("⏳ 正在載入語音辨識模型 faster-whisper (turbo / medium)...")
+# 💡 優先嘗試 "large-v3-turbo"，如果啟動時報錯說找不到模型，再改成 "medium"
+#whisper_model = WhisperModel("large-v3-turbo", device="cpu", compute_type="int8")
+#print("✅ 語音辨識模型載入完成！")
 # ---------
 # AI 設定
 # ---------
@@ -44,37 +53,65 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 GOOGLE_SAFE_BROWSING_KEY = os.getenv("GOOGLE_SAFE_BROWSING_KEY")
 
 try:
-    # 1. 取得所有支援生成內容的模型名稱
-    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    print("🚀 正在初始化 Gemini 雙引擎架構...")
     
-    # 2. 設定優先順序清單 (由新到舊，由 Flash 優先考慮速度)
-    # 我們優先選 3.1 Flash，因為它在處理你的詐騙分析時速度快且更聰明
-    priority_list = [
-        'models/gemini-3.1-flash',         # 首選：最新 3.1 速度版
-        'models/gemini-3.1-pro',           # 次選：最新 3.1 強力推理版
-        'models/gemini-1.5-flash-latest',  # 備選：穩定的 1.5 系列
-        'models/gemini-1.5-flash'
+    # 取得當前 API Key 支援的所有模型
+    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+
+    # ==========================================
+    # 📰 [引擎 1：新聞專用] 尋找分析能力強且額度夠用的標準版
+    # ==========================================
+    # 優先順序：最新 3.5 標準版 -> 上一代 2 標準版(額度通常較放寬) -> 原本的 2.5(保底20次)
+    priority_news = [
+        'models/gemini-3.5-flash', 
+        'models/gemini-2-flash',   
+        'models/gemini-2.5-flash'  
     ]
     
-    selected_model_name = None
-    
-    # 3. 依照優先順序比對清單
-    for target in priority_list:
+    news_model_name = 'models/gemini-2.5-flash' # 預設保底
+    for target in priority_news:
         if target in available_models:
-            selected_model_name = target
+            news_model_name = target
             break
             
-    # 如果優先清單都沒有，就選清單中第一個可用的
-    if not selected_model_name:
-        selected_model_name = available_models[0] if available_models else 'models/gemini-1.5-flash-latest'
+    model_news = genai.GenerativeModel(news_model_name)
+    print(f"✅ [新聞分析] 模型載入成功: {news_model_name}")
 
-    print(f"🚀 自動選擇最佳模型: {selected_model_name}")
-    model = genai.GenerativeModel(selected_model_name)
+    # ==========================================
+    # 💬 [引擎 2：客服專用] 使用 Lite 版本處理高頻率對話 (每日 ~1000 次)
+    # ==========================================
+    intent_model_name = 'models/gemini-3.5-flash-lite' 
+    if 'models/gemini-3.5-flash-lite' not in available_models:
+        if 'models/gemini-2.5-flash' in available_models:
+            intent_model_name = 'models/gemini-2.5-flash'
+        elif 'models/gemini-2-flash-lite' in available_models:
+            intent_model_name = 'models/gemini-2-flash-lite'
+
+    model_intent = genai.GenerativeModel(intent_model_name)
+    print(f"✅ [客服意圖] 模型載入成功: {intent_model_name}")
+
+    # ==========================================
+    # 🎥 [引擎 3：多媒體/檔案深度分析專用] 走獨立配額，不佔用 3.5-flash/lite
+    # ==========================================
+    multimodal_candidates = [
+        'models/gemini-3.6-flash',       # 🥇 首選：擁有巨大免費配額，處理影片極快且不怕超量
+        'models/gemini-3.5-flash',       # 🥈 次選：穩定商用版 Flash
+        'models/gemini-3.1-pro-preview', # 🥉 備援：若未來升級付費版 API，系統會自動使用
+        'models/gemini-2.5-pro'
+    ]
+    multimodal_name = 'models/gemini-3.6-flash' 
+    for m in multimodal_candidates:
+        if m in available_models:
+            multimodal_name = m
+            break
+    model_multimodal = genai.GenerativeModel(multimodal_name)
+    print(f"✅ [多媒體檔案分析] 模型載入成功: {multimodal_name}")
 
 except Exception as e:
-    print(f"❌ 無法取得模型清單，切換至保底模式: {e}")
-    # 萬一連 list_models 都失敗，強制使用一個最通用的名稱
-    model = genai.GenerativeModel('models/gemini-2.5-flash')
+    print(f"❌ 模型載入發生錯誤: {e}")
+    # 萬一發生異常，雙雙使用最穩定的保底設定
+    model_news = genai.GenerativeModel('models/gemini-2.5-flash')
+    model_intent = genai.GenerativeModel('models/gemini-2.5-flash')
 # ---------
 # 真實 AI 分析函式
 # ---------
@@ -101,7 +138,7 @@ def extract_and_clean_urls(text: str) -> list:
         if clean_url and len(clean_url) > 8:
             cleaned_urls.append(clean_url)
             
-    return cleaned_urls
+    return list(set(cleaned_urls))
 
 
 def ai_analyze(text: str):
@@ -136,7 +173,7 @@ def ai_analyze(text: str):
     
     try:
         # 使用同步呼叫（generate_content）比較不容易在簡單腳本出錯
-        response = model.generate_content(
+        response = model_news.generate_content(
             prompt,
             generation_config={
                 "max_output_tokens": 2000,  
@@ -161,6 +198,135 @@ def ai_analyze(text: str):
         }
 # ---------
 # Pydantic Schemas
+# ---------
+def check_user_intent_with_gemini(text: str):
+    """
+    智能意圖路由器：判斷是「對機器人說的閒聊/開場白」還是「需要偵測的疑似詐騙內容」
+    """
+    if len(text) > 100: 
+        return None
+        
+    prompt = f"""
+    你是防詐 LINE 機器人「真識監詐」的智能客服。
+    
+    【系統知識庫】：
+    - 核心功能：支援「文字」、「圖片」與「語音」的防詐分析。
+    - 選單功能：聊天室下方有圖文選單，包含「上傳可疑訊息」、「家庭群組」、「165通報」、「其他假新聞資訊」等功能。
+    - 家庭群組功能：可以綁定家人，當家人收到詐騙訊息時會自動通知群組。可以在圖文選單找到設定。
+    - 群組邀請：支援將本機器人「邀請到 LINE 群組」中進行自動防護。
+    - 新聞功能：選單中的「其他假新聞資訊」包含最新詐騙新聞、防詐測驗與 165 儀表板。
+    
+    【任務】：判斷使用者的輸入是「一般對話/提問」還是「疑似詐騙」。(特別注意：日常閒聊非常習慣加上「啊、喔、呢、吧、呀」等語助詞，例如「早安啊」、「你好喔」，這是極為正常的真人對話。)
+    
+    【判斷規則】：
+    1. 若是閒聊或詢問系統功能（例如：怎麼用家庭群組、可以傳圖片嗎、你好）：
+       請依據【系統知識庫】的內容，用一句親切、自然、且「針對問題回答」的完整句子回應。
+       ⚠️ 絕對不要每次都回覆一樣的話，必須針對使用者的具體提問給予解答或引導。
+       
+    2. 若包含以下任一特徵，請認定為疑似詐騙：
+       - 包含網址連結
+       - 包含投資、飆股、帳戶異常等話術
+       - 明顯為轉傳對話或文章
+       - 陌生人打招呼起手式（在嗎、吃飽沒）
+       此類請【只能】回覆一個單字："ANALYZE"
+
+    使用者輸入：
+    {text}
+    """
+    try:
+        # 💡 溫度調高到 0.5，給予創造力，避免死背答案；維持 1000 Tokens 確保不結巴
+        response = model_intent.generate_content(
+            prompt, 
+            generation_config={
+                "temperature": 0.5,
+                "max_output_tokens": 1000
+            }
+        )
+        result = response.text.strip()
+        
+        if "ANALY" in result.upper():
+            return None
+        else:
+            return result 
+            
+    except Exception as e:
+        print(f"⚠️ 意圖判斷發生錯誤: {e}")
+        return None
+# ---------
+def multimodal_file_process(base64_data: str, file_ext: str = "mp4") -> str:
+    """
+    接收 Base64 影片或文件，透過 Gemini File API 進行快速辨識，萃取核心文字與話術
+    """
+    temp_file_path = None
+    uploaded_file = None
+    try:
+        print(f"📂 正在處理 {file_ext} 檔案並發送至 Gemini 深度分析...")
+        file_bytes = base64.b64decode(base64_data)
+        
+        # 建立暫存檔
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tf:
+            tf.write(file_bytes)
+            temp_file_path = tf.name
+
+        # 上傳到 Google 雲端
+        uploaded_file = genai.upload_file(path=temp_file_path)
+
+        # 針對影片等待轉碼 (若為 PDF 檔案通常直接 ACTIVE)
+        start_time = time.time()
+        timeout_seconds = 12  # 限制最多等 12 秒轉碼，嚴格守住 30 秒大關
+        
+        while uploaded_file.state.name == "PROCESSING":
+            if time.time() - start_time > timeout_seconds:
+                print("⚠️ 檔案處理超過時限，終止請求以防卡死")
+                return "檔案處理時間過長，請確認檔案大小或長度後重試。"
+            time.sleep(2)
+            uploaded_file = genai.get_file(uploaded_file.name)
+
+        if uploaded_file.state.name == "FAILED":
+            return "檔案內容解析失敗。"
+
+       # 萃取對話、畫面字幕或詐騙手法關鍵字
+        prompt = """
+        你現在是一個嚴密的防詐資料萃取系統。請仔細解析這份檔案或影片內容。
+        
+        ⚠️【最高輸出限制】：
+        1. 絕對禁止輸出任何英文思考過程（嚴禁出現 exact match? 等字眼）。
+        2. 只能輸出下方規定的格式，不准加上任何問候語或多餘解說。
+        
+        為確保後續系統能精準比對，請依照以下格式直接輸出：
+        
+        【涉詐實體】：
+        (請「一字不漏」地提取所有的網址、LINE ID、機構名稱、人名，若無則寫無)
+        
+        【原句節錄】：
+        (請提取任何涉及「投資、保證獲利、穩賺不賠、資金用途、解凍金、保密、違約」等敏感關鍵字的【完整原文段落】。⚠️ 重要：請盡量保留原本的語氣與具體話術，絕對不要過度濃縮或改寫成大意摘要！)
+        """
+
+        response = model_multimodal.generate_content(
+            [uploaded_file, prompt],
+            # 💡 將 max_output_tokens 放寬到 1000，確保長篇合約的關鍵字不會被截斷
+            generation_config={"temperature": 0.2, "max_output_tokens": 1000} 
+        )
+
+        extracted_text = response.text.strip() if response and response.text else ""
+        print(f"📂 [檔案內容萃取成功]: {extracted_text[:40]}...")
+        return extracted_text
+
+    except Exception as e:
+        print(f"❌ 多媒體檔案解析失敗: {e}")
+        return ""
+    finally:
+        # 清理暫存檔案與雲端空間
+        if uploaded_file:
+            try:
+                genai.delete_file(uploaded_file.name)
+            except Exception:
+                pass
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+            except Exception:
+                pass
 # ---------
 class FraudLink(Base):
     __tablename__ = "fraud_links"
@@ -210,31 +376,32 @@ def ocr_process(base64_img):
         return ""
 
 def audio_process(base64_audio):
-    """將 Base64 音檔直接在記憶體解碼，並使用 faster-whisper 極速轉字"""
+    """使用 Groq API 遠端呼叫 Whisper Large-V3 (極速 + 完美支援台語)"""
     try:
+        print("🎙️ 正在將語音發送至 Groq Whisper Large-V3 進行高效辨識...")
+        
         # 1. 解碼 Node.js 傳來的 base64 音訊為二進制資料
         audio_bytes = base64.b64decode(base64_audio)
         
-        # 🌟 2. 記憶體串流：直接把二進制包裝成虛擬檔案，完全不讀寫硬碟！
-        audio_stream = io.BytesIO(audio_bytes)
-            
-        print("🎙️ 正在極速聽取並辨識語音內容...")
+        # 2. 包裝成虛擬檔案，並賦予檔名（Groq 需要辨識副檔名來決定音訊格式，LINE 通常為 m4a）
+        audio_file = io.BytesIO(audio_bytes)
+        audio_file.name = "audio.m4a"
         
-        # 🌟 3. 終極加速參數：
-        # - beam_size=1: 關閉多路徑探索，運算速度最快
-        # - vad_filter=True: 自動砍掉長輩錄音前後的空白靜音，只算真正有講話的時間！
-        segments, info = whisper_model.transcribe(
-            audio_stream, 
-            language="zh", 
-            beam_size=1, 
-            vad_filter=True
+        # 3. 呼叫 Groq API 進行語音轉文字
+        transcription = groq_client.audio.transcriptions.create(
+            file=(audio_file.name, audio_file.read()),
+            model="whisper-large-v3", # 頂級台語辨識模型
+            prompt="這是一段台灣常用的繁體中文與台語（閩南語）日常對話，請準確辨識。", # 💡 台語專用提示咒語
+            response_format="text",  # 直接回傳純文字結果
+            language="zh"            # 指定中文語系，大幅提升台語轉譯精準度
         )
         
-        transcribed_text = "".join([segment.text for segment in segments]).strip()
+        transcribed_text = transcription.strip()
+        print(f"🎙️ [Groq 語音辨識成功]: {transcribed_text}")
         return transcribed_text
                 
     except Exception as e:
-        print(f"❌ 語音辨識 (STT) 發生錯誤: {e}")
+        print(f"❌ Groq 語音辨識發生錯誤: {e}")
         return ""
     
 def check_url_in_blacklist(text):
@@ -335,6 +502,7 @@ class AnalyzeRequest(BaseModel):
     user_id: str
     message_type: str # 新增欄位，用來判斷是 text 還是 image
     content: str      # 文字內容 或 Base64 字串
+    source_type: str = "user" #🌟 新增來源判斷，預設為 user (私訊)
 
 class AnalyzeResponse(BaseModel):
     risk_level: Literal["Red", "Yellow", "Green"]
@@ -396,38 +564,14 @@ FRAUD_KEYWORDS_WEIGHTED = {
 
 def check_risk_level(text: str) -> dict:
 
-    """一般使用者的關鍵字「權重」計分邏輯"""
-    BYPASS_KEYWORDS = {"如何上傳可疑訊息","如何上傳可疑訊息?", "我想通報165", "我想通報165!!!", "如何使用家庭群組", "如何使用家庭群組?", "如何把真識監詐拉進群組一起防詐", "如何把「真識監詐」拉進群組一起防詐?", "新手導覽", "新手教學", "邀請到群組", "邀請至群組", "家庭群組", "其他假新聞", "其他假新聞資訊", "上傳", "紅色警戒"}
+    """一般使用者的關鍵字「權重」計分邏輯
+    BYPASS_KEYWORDS = {"真識監詐", "我想上傳", "我要上傳", "我想要上傳", "如何上傳可疑訊息","如何上傳可疑訊息?", "我想通報165", "我想通報165!!!", "如何使用家庭群組", "如何使用家庭群組?", "如何把真識監詐拉進群組一起防詐", "如何把「真識監詐」拉進群組一起防詐?", "新手導覽", "新手教學", "邀請到群組", "邀請至群組", "家庭群組", "測驗", "假新聞", "其他假新聞", "其他假新聞資訊", "其他假新聞相關資訊", "其它假新聞", "其它假新聞資訊", "其它假新聞相關資訊", "上傳", "紅色警戒"}
     
     # 💡 只要命中關鍵字，直接回傳 None 不予評分，交給外層或 LINE 後台去處理
     clean_text_check = re.sub(r'[^\w\s]', '', text).strip()
     if any(kw in clean_text_check for kw in BYPASS_KEYWORDS):
         return None
-    
-# 🔥 呼叫終極清洗大師
-    clean_urls = extract_and_clean_urls(text)
-    
-    if clean_urls:
-        for clean_url in clean_urls:
-            print(f"🎯【網址通解器】成功修復並提取網址: [{clean_url}]")
-            
-            # 第一次查詢：直接丟給底層資料庫
-            db_result = check_url_in_blacklist(clean_url)
-            
-            # 第二次查詢（補救機制）
-            if db_result is None:
-                domain_match = re.search(r'https?://(?:www\.)?([a-zA-Z0-9\-]+)', clean_url)
-                if domain_match:
-                    core_keyword = domain_match.group(1)
-                    if len(core_keyword) > 4:
-                        print(f"🔄 補救機制啟動：使用網址核心特徵 [{core_keyword}] 進行資料庫再查詢...")
-                        db_result = check_url_in_blacklist(core_keyword)
-            
-            # 🌟【絕殺關鍵點】只要底層資料庫有命中紅燈大禮包，立刻 return！
-            if db_result is not None:
-                print(f"🛑【大腦攔截成功】網址命中黑名單，直接回傳紅燈 100 分！")
-                return db_result
-            
+    """
     detected_keywords = []
     score = 0
     
@@ -437,9 +581,9 @@ def check_risk_level(text: str) -> dict:
             detected_keywords.append(f"「{keyword}」")
             score += weight 
     
-    # 🛑 2. 天花板機制：無論中多少個字，最高不超過 65 分
-    if score > 65:
-        score = 65
+    # 🛑 2. 天花板機制：無論中多少個字，最高不超過 80 分
+    if score > 80:
+        score = 80
 
     # 🚦 依據最終分數判定燈號
     if score >= 80:
@@ -454,19 +598,21 @@ def check_risk_level(text: str) -> dict:
         return {
             "risk_level": risk_level,
             "score": score,
-            "reply_text": f"🚨 系統判定分數：{score} 分\n⚠️ 偵測到高風險關鍵字：{', '.join(detected_keywords)}。請提高警覺！"
+            "reply_text": f"🚨 系統判定分數：{score} 分\n⚠️ 偵測到高風險關鍵字：{', '.join(detected_keywords)}。請提高警覺！",
+            "keywords_str": f"\n⚠️ 命中關鍵字：{', '.join(detected_keywords)}"
         }
     else:
         return {
             "risk_level": "Green",
             "score": 0,
-            "reply_text": "✅ 系統判定分數：0 分\n目前未偵測到明顯詐騙關鍵字，但仍請保持警覺。"
+            "reply_text": "✅ 系統判定分數：0 分\n目前未偵測到明顯詐騙關鍵字，但仍請保持警覺。",
+            "keywords_str": ""
         }
 
 def get_official_reminder(text):
     """溫馨導航員 (權重積分版)：計算哪個官方網站關聯度最高，只推播冠軍"""
+    db = SessionLocal() # 💡 只要在 try 的外面開啟一次連線就好
     try:
-        db = SessionLocal()
         site_scores = [] # 用來記錄每個網站的得分：[(site, score), ...]
         official_sites = db.query(OfficialURL).all()
         
@@ -478,15 +624,12 @@ def get_official_reminder(text):
                 # 防呆：排除空字串與單字
                 if len(kw) >= 2 and kw in text:
                     # 🚀 積分演算法：出現次數 * 關鍵字長度
-                    # 例如命中「交通違規」(4字) 1次得 4 分；命中「罰單」(2字) 2次也得 4 分
                     score += text.count(kw) * len(kw) 
             
             # 只要這個網站有得分，就把它加入候選名單
             if score > 0:
                 site_scores.append((site, score))
                 
-        db.close()
-        
         # 如果沒有任何網站得分，就回傳空字串
         if not site_scores:
             return ""
@@ -502,6 +645,8 @@ def get_official_reminder(text):
     except Exception as e:
         print(f"⚠️ 導航小幫手發生異常: {e}")
         return ""
+    finally:
+        db.close() # 💡 這裡會負責完美關門
 
 # --- 外部 API 1: Google Safe Browsing ---
 def check_google_safe_browsing(text):
@@ -617,38 +762,46 @@ def analyze(req: AnalyzeRequest = Body(...)):
         if not final_text:
             return {"risk_level": "Green", "reply_text": "圖片中未辨識到清晰的文字。"}
 
-    # 🌟 防線 1-B：【新增這裡】如果是錄音檔，啟動 faster-whisper 語音轉文字！
+    # 🌟 防線 1-B：如果是錄音檔，啟動 faster-whisper (或 Groq) 語音轉文字！
     elif msg_type == "audio":
-        print(f"🎙️ 收到使用者 {user_id} 語音訊息，啟動 faster-whisper...")
+        print(f"🎙️ 收到使用者 {user_id} 語音訊息，啟動語音辨識...")
         final_text = audio_process(req.content)
         if not final_text:
             return {"risk_level": "Green", "reply_text": "語音中未辨識到清晰的語意內容，請盡量靠近麥克風說話。"}
         
         # 幫語音辨識結果做個引言，老人家看 LINE 才會清楚知道系統聽懂了什麼
         print(f"🎙️ [語音辨識結果]: {final_text}")
-        audio_prefix = f"🎙️【系統已辨識您的語音內容】：\n「{final_text}」\n\n"
+        audio_prefix = f"🎙️【系統已辨識您的語音內容】：\n「{final_text}」\n\n💡 「台灣國語」判斷結果可能不準確，請見諒🙇\n\n"
 
-        BYPASS_KEYWORDS = {"如何上傳可疑訊息", "我想通報165", "如何使用家庭群組", "如何把真識監詐拉進群組一起防詐", "新手導覽", "新手教學", "邀請到群組", "邀請至群組", "家庭群組", "其他假新聞", "其他假新聞資訊", "上傳", "紅色警戒"}
-        clean_audio_text = re.sub(r'[^\w\s]', '', final_text).strip()
-        # 模糊比對：避免 Whisper 加上標點符號導致比對失敗
-        if any(re.sub(r'[^\w\s]', '', kw) in clean_audio_text for kw in BYPASS_KEYWORDS):
-            print("🎯 命中語音操作指令，提示改用鍵盤打字！")
-            return {
-                "risk_level": "Command",
-                "reply_text": (
-                    f"{audio_prefix}"
-                    "💡【語音指令提示】\n"
-                    "⚠️不好意思😔，您剛才說的是系統操作指令，如果您想使用特定「指令」，請試著改用「用鍵盤打字」輸入喔！\n\n"
-                    "👇 常用指令：\n"
-                    "➡️ 新手教學\n"
-                    "➡️ 如何上傳可疑訊息?\n"
-                    "➡️ 如何使用家庭群組?\n"
-                    "➡️ 如何把「真識監詐」拉進群組一起防詐?\n"
-                    "➡️ 我想通報165!!!\n"
-                    "➡️ 其他假新聞資訊"
-                )
-            }
+    # 🌟 防線 1-C：如果是影片或檔案，啟動 Gemini 獨立引擎萃取文字
+    elif msg_type in ["video", "file"]:
+        ext = "mp4" if msg_type == "video" else "pdf"
+        print(f"📁 收到使用者 {user_id} {msg_type} 檔案，啟動多模態解析...")
+        extracted_content = multimodal_file_process(req.content, file_ext=ext)
+        if not extracted_content:
+            return {"risk_level": "Green", "reply_text": "檔案中未偵測到足夠分析的文字或語音內容。"}
+        
+        final_text = extracted_content
+        # 🌟 直接清空 prefix，保持版面乾淨，讓摘要留在下方的按鈕或內容區
+        audio_prefix = ""
+
     print(f"👤 開始分析文字：{final_text[:20]}...")
+    # ==========================================
+    # 🌟 新增防線：Gemini 智能意圖路由器 (過濾閒聊開場白)
+    # ==========================================
+    # 💡 終極優化：只有私訊 (user) 才啟動 Gemini 判斷，群組直接跳過省資源！
+    if req.source_type == "user":
+        intent_reply = check_user_intent_with_gemini(final_text)
+        if intent_reply:
+            print(f"💬 [意圖判定] 判斷為閒聊，Gemini 自動回覆: {intent_reply}")
+            # 💡 利用 "Command" 燈號，前台的 index.js 就不會印出紅綠燈，只會印出這段閒聊文字！
+            return {
+                "risk_level": "Command", 
+                "reply_text": audio_prefix + intent_reply,
+                "transcribed_text": final_text
+            }
+    else:
+        print(f"🥷 [省資源模式] 來自群組的訊息，跳過 Gemini 意圖判斷，直奔防詐分析！")
     # ==========================================
     # 🛡️ 核心防詐判斷邏輯 (瀑布式篩選 - 完全維持原本寫法)
     # ==========================================
@@ -665,9 +818,75 @@ def analyze(req: AnalyzeRequest = Body(...)):
     if not risk_result:
         risk_result = check_url_in_blacklist(final_text)
     
-    # 防線 5：百大關鍵字權重
+    # 🌟 防線 5：關鍵字打分 + MacBERT 模型 RAG 動態加成 (雙軌混合計分)
     if not risk_result:
-        risk_result = check_risk_level(final_text)
+        try:
+            print(f"🧠 [混合判斷啟動] 正在分析內容: {final_text[:30]}...")
+            
+            # 1. 取得關鍵字分數 (本身已有 80 分的天花板機制)
+            keyword_data = check_risk_level(final_text)
+            keyword_score = keyword_data["score"] if keyword_data else 0
+            # 💡 安全抓取字串：如果有命中關鍵字，這包字串就會跟著最終結果顯示
+            keyword_reminder = keyword_data.get("keywords_str", "") if keyword_data else ""
+
+            # 2. 取得 MacBERT + RAG 動態資料庫評分 (滿分 100)
+            pred, raw_scam_p, raw_not_p = predict(final_text, macbert_tokenizer, macbert_model)
+            database_weight = 0.85
+            rag_macbert_score = (raw_scam_p * database_weight) + (0.15 * pred)
+            macbert_score_100 = int(rag_macbert_score * 100)
+
+            if macbert_score_100 > keyword_score:
+                if keyword_score == 0:
+                    # 條件一：模型贏了，但完全沒關鍵字 -> 模型分數打 8 折
+                    score_percent = int(macbert_score_100 * 0.8)
+                    print(f"🛡️ [動態調節] 模型勝出但無關鍵字，最終分數: {score_percent}")
+                else:
+                    # 條件二：模型贏了，且有少部分關鍵字 -> (模型分數 * 0.8) + 關鍵字分數
+                    score_percent = int(macbert_score_100 * 0.8) + keyword_score
+                    score_percent = min(score_percent, 100) # 確保總分不超過 100
+                    print(f"⚖️ [動態調節] 模型勝出且含關鍵字({keyword_score}分)，最終分數: {score_percent}")
+            else:
+                # 條件三：關鍵字分數 >= 模型分數 -> 直接採用關鍵字分數
+                if keyword_score > 40:
+                    # 🌟 新增條件：關鍵字大於 40 分，乘以 1.34 倍，最高不超過 80 分
+                    score_percent = int(keyword_score * 1.34)
+                    score_percent = min(score_percent, 80)
+                    print(f"🎯 [動態調節] 關鍵字勝出(>40分)，加權 1.34 倍，最終分數: {score_percent}")
+                else:
+                    # 關鍵字在 40 分(含)以下，維持原狀
+                    score_percent = keyword_score
+                    print(f"🎯 [動態調節] 關鍵字勝出，最終分數: {score_percent}")
+            
+            print(f"📊 [計分結果] 關鍵字={keyword_score}, 原始MacBERT={macbert_score_100}, 最終採計總分={score_percent}")
+
+            # 5. 依據最終總分轉換為系統需要的紅綠燈號
+            if score_percent >= 80:
+                risk_result = {
+                    "risk_level": "Red",
+                    "score": score_percent,
+                    "reply_text": f"🚨 系統綜合判定分數：{score_percent} 分\n⚠️ 嚴重警告：經 AI 語意模型與關鍵字比對，此訊息具有極高詐騙風險！{keyword_reminder}",
+                    "needs_explanation_button": True, 
+                    "color": "red"
+                }
+            elif score_percent >= 40:
+                risk_result = {
+                    "risk_level": "Yellow",
+                    "score": score_percent,
+                    "reply_text": f"🚨 系統綜合判定分數：{score_percent} 分\n⚠️ 注意：此訊息疑似包含詐騙話術，請提高警覺！{keyword_reminder}",
+                    "needs_explanation_button": True,
+                    "color": "yellow"
+                }
+            else:
+                risk_result = {
+                    "risk_level": "Green",
+                    "score": score_percent,
+                    "reply_text": f"✅ 系統綜合判定分數：{score_percent} 分\nAI 判定此訊息目前看起來安全無虞，但仍請保持警覺。{keyword_reminder}"
+                }
+                
+        except Exception as e:
+            print(f"❌ MacBERT 分析失敗，啟動備用機制: {e}")
+            # 萬一模型運算當機，退回純關鍵字權重機制當作保底
+            risk_result = check_risk_level(final_text)
 
     # ==========================================
 
@@ -680,7 +899,10 @@ def analyze(req: AnalyzeRequest = Body(...)):
         save_to_db(user_id, final_text, risk_result["risk_level"], risk_result["score"])
         return {
             "risk_level": risk_result["risk_level"],
-            "reply_text": risk_result["reply_text"]
+            "reply_text": risk_result["reply_text"],
+            "transcribed_text": final_text,
+            "needs_explanation_button": risk_result.get("needs_explanation_button", False),
+            "button_color": risk_result.get("color", "yellow")
         }
     else:
         # 當前面的防線全數回傳 None 時的保底綠燈處理
@@ -688,8 +910,48 @@ def analyze(req: AnalyzeRequest = Body(...)):
         save_to_db(user_id, final_text, "Green", 0)
         return {
             "risk_level": "Green",
-            "reply_text": fallback_text
+            "reply_text": fallback_text,
+            "transcribed_text": final_text
         }
+# ==========================================
+# 🌟 新增：針對特定訊息詢問 AI 詐騙原因的 API
+# ==========================================
+class ExplainRequest(BaseModel):
+    user_id: str
+    message_content: str  # 由於你前台可能沒有存資料庫的 ID，我們直接把原本的文字傳過來
+    color: Literal["red", "yellow"]
+
+@app.post("/analyze/explain")
+def explain_fraud_reason(req: ExplainRequest = Body(...)):
+    print(f"🔍 收到使用者 {req.user_id} 詢問 {req.color} 燈原因...")
+    
+    # 根據顏色切換隱藏的 Prompt
+    if req.color == "red":
+        target_question = "這段文字或圖片為什麼一定就是詐騙？"
+    else:
+        target_question = "這段文字或圖片為什麼可能是詐騙？"
+        
+    prompt = f"""
+    任務：請根據以下內容，回答「{target_question}」
+    待分析內容：{req.message_content}
+    
+    限制：
+    1. 內容多以繁體中文、台灣國語或英文為主，請用繁體中文，以專業客服語氣回答。
+    2. 用一句話（約 10 到 20 字）直接點出具體的詐騙特徵（例如：包含飆股關鍵字、要求匯款、圖片排版異常等）。
+    3. 開頭直接說明原因，不需要說「好的」或重複問題。
+    """
+    
+    try:
+        # 使用你已經設定好的 model_intent (3.5-flash-lite)
+        response = model_intent.generate_content(prompt)
+        explanation = response.text.strip()
+        print(f"💡 [AI 解釋結果]: {explanation}")
+        
+        return {"explanation": explanation}
+        
+    except Exception as e:
+        print(f"❌ 詢問解釋發生錯誤: {e}")
+        return {"explanation": "系統暫時無法提供詳細解釋，但請務必對此訊息保持警覺！"}
 # .\.venv\Scripts\Activate 啟動虛擬環境
 # python -m uvicorn main:app --reload 啟動 FastAPI 中樞服務
 
