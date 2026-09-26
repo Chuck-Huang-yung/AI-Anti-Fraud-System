@@ -14,6 +14,15 @@
 
 ---
 
+## 💡 開發角色與核心貢獻 (Role & Contribution)
+> * **團隊規模：** 6 人產學專題團隊
+> * **我的核心負責項目：擔任專案組長和系統整合**
+>   * **專案管理 (Agile Leadership)：** 擔任組長並導入**敏捷式開發 (azure devops)** 控管專案排程，事先列出系統所需的功能、架構設計，並依照每週進度有規律地執行。
+>   * **AI 與後端決策中樞：** 建置 Python FastAPI 引擎，完成 RoBERTa 模型微調與雲端部署；設計 PostgreSQL 關聯式資料庫架構與動態黑名單讀取。
+>   * **微服務與跨端串接：** 撰寫 Node.js Gateway 負責處理 LINE Webhook 請求，並無縫串接後端 API 與前端 React 家庭群組系統頁面。
+
+---
+
 ## 🔀 專案架構與原始碼導覽 (Repository Navigation)
 
 本專案採用嚴謹的**「前後端分離 (Frontend/Backend Separation)」**與微服務架構開發，程式碼依據功能模組存放於不同分支 (Branches)，請透過左上角切換分支以查看完整原始碼：
