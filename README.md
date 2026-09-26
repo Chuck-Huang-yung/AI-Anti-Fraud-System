@@ -7,7 +7,9 @@
 ![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL-4169E1?logo=postgresql&logoColor=white)
 ![LINE API](https://img.shields.io/badge/Platform-LINE_Messaging_API-00C300?logo=line&logoColor=white)
 
-> **💡 專案簡介**
+---
+
+## 💡 專案簡介
 > 2025年台灣詐騙財損高達 893.26 億元，其中年長者面臨極嚴重的「高財損」危機。本系統以長輩熟悉的 LINE 為介面，免下載 APP，運用自然語言處理 (NLP) 量化語意壓迫特徵，並首創「家庭協防機制」，將防詐由「個人單打獨鬥」翻轉為「全家即時守護」。本專案目前已進入 MVP 封閉測試階段。
 
 ---
