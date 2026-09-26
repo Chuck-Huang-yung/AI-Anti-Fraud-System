@@ -76,6 +76,6 @@ $$S_{final} = \alpha \cdot S_{NLP} + \beta \cdot S_{RAG}, \text{otherwise}$$
 
 ## 📂 完整系統文件與展示 (Documentation & Demo)
 
-> 欲深入了解本系統的多模態處理流程、使用案例圖 (Use Case)、系統循序圖 (Sequence Diagram)，請參閱下方之完整系統文件。
+> 欲深入了解本系統的多模態處理流程、實際操作選單介面、系統循序圖 (Sequence Diagram)，請參閱下方之完整系統文件。
 
 [📄 點擊查看：黃俊洋_真識監詐_AI語意防詐與家庭協防系統.pdf](https://drive.google.com/file/d/12gQqNaILdhfq-i1IFrR_gvoIbEsgndyZ/view?usp=sharing) 
