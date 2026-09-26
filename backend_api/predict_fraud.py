@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from transformers import BertTokenizer, BertForSequenceClassification
 
-MODEL_DIR = "./fraud_model_macbert"
+MODEL_DIR = "./fraud_model_roberta"
 MAX_LEN = 256
 LOG_PATH = Path("pred_log.csv")
 

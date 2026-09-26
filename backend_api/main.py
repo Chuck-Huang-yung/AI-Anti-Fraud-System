@@ -29,12 +29,12 @@ from pathlib import Path
 from history_checker import HistoryChecker
 from fastapi import Body
 
-# 👇👇👇 加入這行：引入你剛剛測試成功的 MacBERT 預測腳本
+# 👇👇👇 加入這行：引入你剛剛測試成功的 RoBERTa 預測腳本
 from predict_fraud import load_model, predict
 
 app = FastAPI(title="Fraud Analysis Core API")
 
-macbert_tokenizer, macbert_model = load_model()
+roberta_tokenizer, roberta_model = load_model()
 SQLALCHEMY_DATABASE_URL = "postgresql://postgres:0509@localhost/fraud_db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -818,7 +818,7 @@ def analyze(req: AnalyzeRequest = Body(...)):
     if not risk_result:
         risk_result = check_url_in_blacklist(final_text)
     
-    # 🌟 防線 5：關鍵字打分 + MacBERT 模型 RAG 動態加成 (雙軌混合計分)
+    # 🌟 防線 5：關鍵字打分 + RoBERTa 模型 RAG 動態加成 (雙軌混合計分)
     if not risk_result:
         try:
             print(f"🧠 [混合判斷啟動] 正在分析內容: {final_text[:30]}...")
@@ -829,20 +829,20 @@ def analyze(req: AnalyzeRequest = Body(...)):
             # 💡 安全抓取字串：如果有命中關鍵字，這包字串就會跟著最終結果顯示
             keyword_reminder = keyword_data.get("keywords_str", "") if keyword_data else ""
 
-            # 2. 取得 MacBERT + RAG 動態資料庫評分 (滿分 100)
-            pred, raw_scam_p, raw_not_p = predict(final_text, macbert_tokenizer, macbert_model)
+            # 2. 取得 RoBERTa + RAG 動態資料庫評分 (滿分 100)
+            pred, raw_scam_p, raw_not_p = predict(final_text, roberta_tokenizer, roberta_model)
             database_weight = 0.85
-            rag_macbert_score = (raw_scam_p * database_weight) + (0.15 * pred)
-            macbert_score_100 = int(rag_macbert_score * 100)
+            rag_roberta_score = (raw_scam_p * database_weight) + (0.15 * pred)
+            roberta_score_100 = int(rag_roberta_score * 100)
 
-            if macbert_score_100 > keyword_score:
+            if roberta_score_100 > keyword_score:
                 if keyword_score == 0:
                     # 條件一：模型贏了，但完全沒關鍵字 -> 模型分數打 8 折
-                    score_percent = int(macbert_score_100 * 0.8)
+                    score_percent = int(roberta_score_100 * 0.8)
                     print(f"🛡️ [動態調節] 模型勝出但無關鍵字，最終分數: {score_percent}")
                 else:
                     # 條件二：模型贏了，且有少部分關鍵字 -> (模型分數 * 0.8) + 關鍵字分數
-                    score_percent = int(macbert_score_100 * 0.8) + keyword_score
+                    score_percent = int(roberta_score_100 * 0.8) + keyword_score
                     score_percent = min(score_percent, 100) # 確保總分不超過 100
                     print(f"⚖️ [動態調節] 模型勝出且含關鍵字({keyword_score}分)，最終分數: {score_percent}")
             else:
@@ -857,7 +857,7 @@ def analyze(req: AnalyzeRequest = Body(...)):
                     score_percent = keyword_score
                     print(f"🎯 [動態調節] 關鍵字勝出，最終分數: {score_percent}")
             
-            print(f"📊 [計分結果] 關鍵字={keyword_score}, 原始MacBERT={macbert_score_100}, 最終採計總分={score_percent}")
+            print(f"📊 [計分結果] 關鍵字={keyword_score}, 原始RoBERTa={roberta_score_100}, 最終採計總分={score_percent}")
 
             # 5. 依據最終總分轉換為系統需要的紅綠燈號
             if score_percent >= 80:
@@ -884,7 +884,7 @@ def analyze(req: AnalyzeRequest = Body(...)):
                 }
                 
         except Exception as e:
-            print(f"❌ MacBERT 分析失敗，啟動備用機制: {e}")
+            print(f"❌ RoBERTa 分析失敗，啟動備用機制: {e}")
             # 萬一模型運算當機，退回純關鍵字權重機制當作保底
             risk_result = check_risk_level(final_text)
 
