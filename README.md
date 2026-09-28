@@ -48,11 +48,6 @@
 
 ---
 
-## 📊 敏捷式開發 (Azure DevOps) 工作清單
-<img width="1590" height="989" alt="aae78c60-3547-452e-a8f0-5be0ba50a79c" src="https://github.com/user-attachments/assets/5bc99646-c5ae-4bd3-b67d-9c457dbef340" />
-
----
-
 ## 🔀 專案架構與原始碼導覽 (Repository Navigation)
 
 本專案採用嚴謹的**「前後端分離 (Frontend/Backend Separation)」**與微服務架構開發，程式碼依據功能模組存放於不同分支 (Branches)，請透過左上角切換分支以查看完整原始碼：
@@ -61,6 +56,11 @@
   * 包含 Python FastAPI 核心決策大腦、LINE Bot Webhook 接收邏輯、以及政府開放平台資料庫爬蟲與黑名單更新排程 (`update_blacklist.py`)。
 * 🌿 **[`frontend` 分支]**：**使用者介面與 LIFF 網頁端**
   * 包含 Node.js 環境配置 (`package.json`)、LINE LIFF 家庭群組管理介面 (`FraudChickenBye/mobile` 模組)。
+
+---
+
+## 📊 敏捷式開發 (Azure DevOps) 工作清單
+<img width="1590" height="989" alt="aae78c60-3547-452e-a8f0-5be0ba50a79c" src="https://github.com/user-attachments/assets/5bc99646-c5ae-4bd3-b67d-9c457dbef340" />
 
 ---
 
