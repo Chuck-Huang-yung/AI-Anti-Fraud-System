@@ -23,6 +23,15 @@
 
 ---
 
+## 🛠️ 技術棧與雲端部署 (Tech Stack & Deployment)
+
+* **前端網頁與 LIFF (Client-Side)：** 部署於 Vercel 雲端平台，利用邊緣運算 (Edge Network) 提供無延遲載入體驗。
+* **通訊閘道主控端 (Gateway)：** 採用 Node.js 部署於 AWS EC2 (Ubuntu Linux)，負責監聽 LINE Webhook 事件，並非同步調度外部查核 API。
+* **演算中樞 (AI Core)：** 以 Python FastAPI 建構，搭載 RoBERTa-wwm 模型，無縫串接 Node.js 閘道器處理高併發推論請求。
+* **資料庫 (Database)：** 採用 PostgreSQL。利用其 ACID 交易機制確保權限審核安全，並活用 JSONB 靈活格式儲存家庭群組的動態變動名單。
+
+---
+
 ## 📊 敏捷式開發 (Azure DevOps) 工作清單
 <img width="1590" height="989" alt="aae78c60-3547-452e-a8f0-5be0ba50a79c" src="https://github.com/user-attachments/assets/5bc99646-c5ae-4bd3-b67d-9c457dbef340" />
 
@@ -78,15 +87,6 @@ $$S_{final} = 100, \text{if } x \in DB_{blacklist}$$
 $$S_{final} = \alpha \cdot S_{NLP} + \beta \cdot S_{RAG}, \text{otherwise}$$
 
 > **機制說明：** 若檢索特徵命中黑名單，觸發「一票否決熔斷機制」直接賦予 100 分（紅燈）以確保零漏判；若未直接命中，則以演算法自適應分配權重 ($\alpha, \beta$) 融合計算，確保高度穩定性與公信力。
-
----
-
-## 🛠️ 技術棧與雲端部署 (Tech Stack & Deployment)
-
-* **前端網頁與 LIFF (Client-Side)：** 部署於 Vercel 雲端平台，利用邊緣運算 (Edge Network) 提供無延遲載入體驗。
-* **通訊閘道主控端 (Gateway)：** 採用 Node.js 部署於 AWS EC2 (Ubuntu Linux)，負責監聽 LINE Webhook 事件，並非同步調度外部查核 API。
-* **演算中樞 (AI Core)：** 以 Python FastAPI 建構，搭載 RoBERTa-wwm 模型，無縫串接 Node.js 閘道器處理高併發推論請求。
-* **資料庫 (Database)：** 採用 PostgreSQL。利用其 ACID 交易機制確保權限審核安全，並活用 JSONB 靈活格式儲存家庭群組的動態變動名單。
 
 ---
 
