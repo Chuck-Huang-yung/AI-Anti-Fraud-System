@@ -42,8 +42,8 @@
 ## 🛠️ 技術棧與雲端部署 (Tech Stack & Deployment)
 
 * **前端網頁與 LIFF (Client-Side)：** 部署於 Vercel 雲端平台，利用邊緣運算 (Edge Network) 提供無延遲載入體驗。
-* **通訊閘道主控端 (Gateway)：** 採用 Node.js 部署於 AWS EC2 (Ubuntu Linux)，負責監聽 LINE Webhook 事件，並非同步調度外部查核 API。
-* **演算中樞 (AI Core)：** 以 Python FastAPI 建構，搭載 RoBERTa-wwm 模型，無縫串接 Node.js 閘道器處理高併發推論請求。
+* **通訊閘道主控端 (Gateway)：** 採用 Node.js 部署於 AWS EC2 (Ubuntu Linux)，負責監聽 LINE Webhook 事件，並以非同步調度外部查核 API。
+* **演算中樞 (AI Core)：** 透過 Python (FastAPI) 運行 RoBERTa-wwm 模型。我們將吃重的 AI 運算獨立出來，專門接收來自 Node.js 閘道的推論請求，確保系統在高流量下依然穩定。
 * **資料庫 (Database)：** 採用 PostgreSQL。利用其 ACID 交易機制確保權限審核安全，並活用 JSONB 靈活格式儲存家庭群組的動態變動名單。
 
 ---
