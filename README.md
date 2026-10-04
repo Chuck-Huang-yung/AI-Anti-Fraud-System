@@ -23,6 +23,13 @@
 
 ---
 
+## 📊 敏捷式開發 (Azure DevOps) 工作清單畫面 
+<a href="https://github.com/user-attachments/assets/5bc99646-c5ae-4bd3-b67d-9c457dbef340" target="_blank">
+  <img width="1590" height="989" alt="aae78c60-3547-452e-a8f0-5be0ba50a79c" src="https://github.com/user-attachments/assets/5bc99646-c5ae-4bd3-b67d-9c457dbef340" />
+</a>
+
+---
+
 ## ✨ 系統核心特色 (Core Features)
 
 ### 1. 多模態低門檻解析 (Multi-Modal Analysis)
@@ -56,13 +63,6 @@
   * 包含 Python FastAPI 核心決策大腦、LINE Bot Webhook 接收邏輯、以及政府開放平台資料庫爬蟲與黑名單更新排程 (`update_blacklist.py`)。
 * 🌿 **[`frontend` 分支]**：**使用者介面與 LIFF 網頁端**
   * 包含 Node.js 環境配置 (`package.json`)、LINE LIFF 家庭群組管理介面 (`FraudChickenBye/mobile` 模組)。
-
----
-
-## 📊 敏捷式開發 (Azure DevOps) 工作清單畫面 
-<a href="https://github.com/user-attachments/assets/5bc99646-c5ae-4bd3-b67d-9c457dbef340" target="_blank">
-  <img width="1590" height="989" alt="aae78c60-3547-452e-a8f0-5be0ba50a79c" src="https://github.com/user-attachments/assets/5bc99646-c5ae-4bd3-b67d-9c457dbef340" />
-</a>
 
 ---
 
