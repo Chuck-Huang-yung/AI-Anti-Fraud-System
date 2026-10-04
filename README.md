@@ -24,8 +24,8 @@
 ---
 
 ## 📊 敏捷式開發 (Azure DevOps) 工作清單畫面 
-<a href="https://github.com/user-attachments/assets/0a07c38c-9164-4d16-a2c4-add4b7eb3bb4" target="_blank">
-  <img width="1560" height="1008" alt="image" src="https://github.com/user-attachments/assets/0a07c38c-9164-4d16-a2c4-add4b7eb3bb4" />
+<a href="https://github.com/user-attachments/assets/a9e4465f-be80-486d-bbf9-5306a329c680" target="_blank">
+  <img width="1560" height="1008" alt="image" src="https://github.com/user-attachments/assets/a9e4465f-be80-486d-bbf9-5306a329c680" />
 </a>
 
 ---
