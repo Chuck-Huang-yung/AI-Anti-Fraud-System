@@ -15,9 +15,9 @@ SELECT * FROM message_logs ORDER BY id DESC;
     ];
 
 {
-    "long gemini API": "AIzaSyBIBrg7QQHhhr9lEeTkpfFGM413R5mqSlc",
-    "CHANNEL_ACCESS_TOKEN": "WTViiEqvzKG4yGgiwSPPxdsnNBFXnjgjdaCKnb9V52YY6g8qVaaJLGEtPSprClKt/lCRZG/6/YgHsn138C6vZgyH6XP+hQKel+6JRAKaB1w52tlhz2lOGEWEuWFY5mbl3BaItalpAt1vyYvZzUIpZgdB04t89/1O/w1cDnyilFU=",
-    "CHANNEL_SECRET": "1b60b8cc7b7ca00d3403a0d9ff867de8"
+    "long gemini API": "XXX",
+    "CHANNEL_ACCESS_TOKEN": "XXX",
+    "CHANNEL_SECRET": "XXX"
   }
     
 deactivate
